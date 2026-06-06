@@ -3,12 +3,12 @@
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {
-    "dev:api": "bun run dev --cwd packages/api",
-    "dev:web": "bun run dev --cwd packages/web",
-    "build": "bun run build --cwd packages/api && bun run build --cwd packages/web",
-    "test": "bun run test --cwd packages/api",
-    "db:migrate": "bun run db:migrate --cwd packages/api",
-    "db:seed": "bun run db:seed --cwd packages/api",
-    "db:studio": "bun run db:studio --cwd packages/api"
+    "dev:api": "bun --cwd packages/api run dev",
+    "dev:web": "bun --cwd packages/web run dev",
+    "build": "bun --cwd packages/api run build && bun --cwd packages/web run build",
+    "test": "bun --cwd packages/api run test",
+    "db:migrate": "bun --cwd packages/api run db:migrate",
+    "db:seed": "bun --cwd packages/api run db:seed",
+    "db:studio": "bun --cwd packages/api run db:studio"
   }
 }

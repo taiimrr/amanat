@@ -16,11 +16,12 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// Handle 401 — clear auth and redirect to login
+// Handle 401 — clear auth and redirect to login (skip for /auth/refresh to avoid redirect loops)
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isRefreshEndpoint = error.config?.url?.includes('/auth/refresh')
+    if (error.response?.status === 401 && !isRefreshEndpoint) {
       const auth = useAuthStore()
       auth.clearAuth()
       window.location.href = '/login'

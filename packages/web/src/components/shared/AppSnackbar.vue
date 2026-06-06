@@ -1,25 +1,22 @@
 <template>
-  <div>
+  <template v-for="item in notifications.items" :key="item.id">
     <v-snackbar
-      v-for="item in notifications.items"
-      :key="item.id"
-      v-model="show"
+      :model-value="true"
       :color="item.type"
       location="bottom right"
       :timeout="4000"
+      @update:model-value="notifications.dismiss(item.id)"
     >
       {{ item.message }}
       <template #actions>
         <v-btn variant="text" @click="notifications.dismiss(item.id)">Close</v-btn>
       </template>
     </v-snackbar>
-  </div>
+  </template>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useNotificationStore } from '@/stores/notifications'
 
 const notifications = useNotificationStore()
-const show = ref(true)
 </script>

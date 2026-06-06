@@ -13,11 +13,15 @@ const app = Fastify({
   },
 })
 
-// Global error handler — handles AppError and @fastify/jwt errors uniformly
+// Global error handler — 4xx errors expose the user-facing message; 5xx errors log internally and return a generic message
 app.setErrorHandler((error, _request, reply) => {
   const status = (error as { statusCode?: number }).statusCode ?? 500
-  if (status >= 500) app.log.error(error)
-  reply.status(status).send({ error: error.message ?? 'Internal Server Error' })
+  if (status >= 500) {
+    app.log.error(error)
+    reply.status(status).send({ error: 'Something went wrong. Please try again later.' })
+  } else {
+    reply.status(status).send({ error: error.message ?? 'Request failed.' })
+  }
 })
 
 // Plugins
