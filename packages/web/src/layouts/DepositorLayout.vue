@@ -1,3 +1,28 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notifications'
+import { authApi } from '@/api/endpoints/auth'
+
+const router = useRouter()
+const auth = useAuthStore()
+const notifications = useNotificationStore()
+const loggingOut = ref(false)
+
+async function handleLogout() {
+  loggingOut.value = true
+  try {
+    await authApi.logout()
+  } finally {
+    auth.clearAuth()
+    loggingOut.value = false
+    notifications.info('Signed out successfully')
+    router.push('/login')
+  }
+}
+</script>
+
 <template>
   <v-app>
     <v-navigation-drawer permanent>
@@ -40,28 +65,3 @@
     </v-main>
   </v-app>
 </template>
-
-<script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { useNotificationStore } from '@/stores/notifications'
-import { authApi } from '@/api/endpoints/auth'
-
-const router = useRouter()
-const auth = useAuthStore()
-const notifications = useNotificationStore()
-const loggingOut = ref(false)
-
-async function handleLogout() {
-  loggingOut.value = true
-  try {
-    await authApi.logout()
-  } finally {
-    auth.clearAuth()
-    loggingOut.value = false
-    notifications.info('Signed out successfully')
-    router.push('/login')
-  }
-}
-</script>

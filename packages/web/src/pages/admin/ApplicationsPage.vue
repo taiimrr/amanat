@@ -1,3 +1,16 @@
+<script setup lang="ts">
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+
+const upcomingFeatures = [
+  'Review business applications',
+  'Due diligence score breakdown',
+  'Approve / reject businesses',
+  'Contract management',
+]
+</script>
+
 <template>
   <v-container class="pa-6">
     <h1 class="text-h4 font-weight-bold mb-1">Business Applications</h1>
@@ -48,16 +61,3 @@
     </v-row>
   </v-container>
 </template>
-
-<script setup lang="ts">
-import { useAuthStore } from '@/stores/auth'
-
-const auth = useAuthStore()
-
-const upcomingFeatures = [
-  'Review business applications',
-  'Due diligence score breakdown',
-  'Approve / reject businesses',
-  'Contract management',
-]
-</script>

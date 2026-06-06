@@ -1,4 +1,4 @@
-# Amanat — Claude Code Project Handoff
+# Amanat — Project Handoff Guide
 
 ## What you are building
 
@@ -12,18 +12,24 @@ This document covers the MVP — a fully working system with real data flows, no
 
 ## Tech stack
 
-| Layer | Technology | Reason |
+| Layer | Technology | Notes |
 |---|---|---|
+| Package manager | **Bun** | Replaces npm/npx everywhere. Use `bun`, `bunx`, `bun run` throughout. |
+| Monorepo | Bun workspaces | `packages/*` workspace layout |
 | Backend API | Node.js + TypeScript + Fastify | Fast, typed, lightweight |
 | Database | PostgreSQL + Prisma ORM | Relational integrity, ACID transactions |
 | Background jobs | BullMQ + Redis | Scheduled distributions, async processing |
-| Auth | JWT (access + refresh tokens) | Three user roles: depositor, business, admin |
-| Frontend | React 18 + Vite + TypeScript | Fast dev, strong ecosystem |
-| Styling | Tailwind CSS | Utility-first, consistent |
-| Charts | Recharts | React-native, composable |
-| Data fetching | TanStack Query v5 | Server state, caching, optimistic updates |
-| Testing | Vitest + Supertest | Unit + integration tests from day one |
-| Dev environment | Docker Compose | Postgres + Redis local, no global installs |
+| Auth | JWT (access token in memory + refresh token in httpOnly cookie) | Three roles: DEPOSITOR, BUSINESS, ADMIN |
+| Testing | Bun test runner (`bun test`) | Built-in — no Vitest or Jest needed |
+| Frontend | **Vue 3 + TypeScript + Vite** | Composition API + `<script setup>` throughout |
+| UI library | **Vuetify 3** | Material Design components — no Tailwind |
+| Client state | **Pinia** | Auth, notifications, UI preferences only |
+| Routing | **Vue Router 4** | Role-based route guards |
+| Server state | **TanStack Vue Query v5** | All API data — never duplicate in Pinia |
+| Charts | **vue-apexcharts + ApexCharts** | First-class Vue 3 support |
+| HTTP client | **Axios** | With auth interceptor for token injection |
+| Money precision | **decimal.js** | Both frontend and backend — never JS float for money |
+| Dev environment | Docker Compose | PostgreSQL 16 + Redis 7 |
 
 ---
 
@@ -32,13 +38,14 @@ This document covers the MVP — a fully working system with real data flows, no
 ```
 amanat/
 ├── packages/
-│   ├── api/                    # Fastify backend
+│   ├── api/                         # Fastify backend (Bun runtime)
 │   │   ├── src/
 │   │   │   ├── modules/
 │   │   │   │   ├── auth/
 │   │   │   │   ├── depositors/
-│   │   │   │   ├── investments/
+│   │   │   │   ├── businesses/
 │   │   │   │   ├── contracts/
+│   │   │   │   ├── allocations/
 │   │   │   │   ├── oracle/
 │   │   │   │   ├── distributions/
 │   │   │   │   └── impact/
@@ -47,77 +54,235 @@ amanat/
 │   │   │   │   ├── compliance-guard/
 │   │   │   │   └── audit-logger/
 │   │   │   ├── jobs/
-│   │   │   └── prisma/
-│   │   │       └── schema.prisma
-│   └── web/                    # React frontend
+│   │   │   ├── plugins/
+│   │   │   │   ├── prisma.ts
+│   │   │   │   ├── redis.ts
+│   │   │   │   ├── auth.ts
+│   │   │   │   └── cors.ts
+│   │   │   ├── hooks/
+│   │   │   │   └── authenticate.ts
+│   │   │   └── app.ts
+│   │   ├── prisma/
+│   │   │   ├── schema.prisma
+│   │   │   └── seed.ts
+│   │   ├── tests/
+│   │   ├── .env.example
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── web/                         # Vue 3 + Vuetify frontend
 │       ├── src/
+│       │   ├── plugins/
+│       │   │   ├── vuetify.ts       # theme + component registration
+│       │   │   ├── query.ts         # Vue Query client config
+│       │   │   └── router.ts        # Vue Router + route guards
+│       │   ├── stores/              # Pinia — client state ONLY
+│       │   │   ├── auth.ts
+│       │   │   ├── notifications.ts
+│       │   │   └── preferences.ts
+│       │   ├── composables/         # Vue Query hooks — all server state
+│       │   │   ├── usePortfolio.ts
+│       │   │   ├── useImpact.ts
+│       │   │   ├── useDistributions.ts
+│       │   │   ├── useAuditTrail.ts
+│       │   │   ├── useContracts.ts
+│       │   │   └── useReports.ts
+│       │   ├── layouts/
+│       │   │   ├── DepositorLayout.vue
+│       │   │   ├── BusinessLayout.vue
+│       │   │   └── AdminLayout.vue
 │       │   ├── pages/
+│       │   │   ├── auth/
+│       │   │   │   └── LoginPage.vue
 │       │   │   ├── depositor/
+│       │   │   │   ├── DashboardPage.vue
+│       │   │   │   ├── PortfolioPage.vue
+│       │   │   │   ├── ImpactPage.vue
+│       │   │   │   └── AuditPage.vue
 │       │   │   ├── business/
+│       │   │   │   ├── DashboardPage.vue
+│       │   │   │   ├── ReportNewPage.vue
+│       │   │   │   └── ReportsPage.vue
 │       │   │   └── admin/
+│       │   │       ├── ApplicationsPage.vue
+│       │   │       ├── ContractsPage.vue
+│       │   │       ├── ReportQueuePage.vue
+│       │   │       ├── DistributionsPage.vue
+│       │   │       └── ZakatPage.vue
 │       │   ├── components/
-│       │   └── api/
+│       │   │   ├── portfolio/
+│       │   │   │   ├── AllocationTable.vue
+│       │   │   │   └── InvestmentDrawer.vue
+│       │   │   ├── impact/
+│       │   │   │   ├── ProfitChain.vue
+│       │   │   │   ├── ImpactMetrics.vue
+│       │   │   │   └── VerificationBadges.vue
+│       │   │   └── shared/
+│       │   │       ├── AppSnackbar.vue   # global notification outlet
+│       │   │       ├── RmAmount.vue      # formatted RM display
+│       │   │       └── StatusChip.vue    # reusable status badge
+│       │   ├── api/
+│       │   │   ├── client.ts             # axios instance + interceptors
+│       │   │   └── endpoints/
+│       │   ├── assets/
+│       │   │   └── main.css
+│       │   ├── App.vue
+│       │   └── main.ts
+│       ├── index.html
+│       ├── vite.config.ts
+│       ├── tsconfig.json
+│       └── package.json
+├── bunfig.toml
 ├── docker-compose.yml
+├── package.json                     # root — bun workspace scripts
 └── README.md
 ```
 
 ---
 
+## Bun commands reference
+
+Always use `bun` / `bunx` — never `npm`, `npx`, or `node` directly.
+
+```bash
+# Install all dependencies across workspaces
+bun install
+
+# Run scripts
+bun run dev:api          # start backend
+bun run dev:web          # start frontend
+bun run test             # run backend tests (bun test)
+bun run db:migrate       # prisma migrate dev
+bun run db:seed          # run seed script
+bun run db:studio        # prisma studio
+
+# Inside packages/api directly
+bunx prisma generate
+bunx prisma migrate dev --name <name>
+bunx prisma studio
+
+# Run a single test file
+bun test src/lib/shariah-engine/contract-validator.test.ts
+```
+
+Root `package.json` scripts use `--cwd` not `--workspace`:
+```json
+{
+  "scripts": {
+    "dev:api": "bun run dev --cwd packages/api",
+    "dev:web": "bun run dev --cwd packages/web",
+    "db:migrate": "bun run db:migrate --cwd packages/api",
+    "db:seed": "bun run db:seed --cwd packages/api",
+    "db:studio": "bun run db:studio --cwd packages/api",
+    "test": "bun run test --cwd packages/api"
+  }
+}
+```
+
+API `package.json` scripts:
+```json
+{
+  "scripts": {
+    "dev": "bun run --watch src/app.ts",
+    "build": "bun build src/app.ts --outdir dist --target bun",
+    "start": "bun run dist/app.js",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "db:migrate": "bunx prisma migrate dev",
+    "db:seed": "bun run prisma/seed.ts",
+    "db:studio": "bunx prisma studio",
+    "db:generate": "bunx prisma generate"
+  }
+}
+```
+
+---
+
+## Backend dependencies (`packages/api`)
+
+```json
+{
+  "dependencies": {
+    "@prisma/client": "^5.15.0",
+    "fastify": "^4.28.0",
+    "@fastify/jwt": "^8.0.0",
+    "@fastify/cookie": "^9.4.0",
+    "@fastify/cors": "^9.0.0",
+    "@fastify/helmet": "^11.1.0",
+    "@fastify/multipart": "^8.3.0",
+    "@fastify/rate-limit": "^9.1.0",
+    "fastify-plugin": "^4.5.1",
+    "bullmq": "^5.12.0",
+    "ioredis": "^5.4.1",
+    "bcryptjs": "^2.4.3",
+    "decimal.js": "^10.4.3",
+    "zod": "^3.23.8",
+    "pino": "^9.3.1",
+    "pino-pretty": "^11.2.1"
+  },
+  "devDependencies": {
+    "prisma": "^5.15.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/bun": "latest"
+  }
+}
+```
+
+Note: No `typescript`, `tsx`, or `vitest` in devDependencies — Bun handles TypeScript natively and has a built-in test runner.
+
+---
+
+## Frontend dependencies (`packages/web`)
+
+```json
+{
+  "dependencies": {
+    "vue": "^3.4.31",
+    "vue-router": "^4.3.3",
+    "pinia": "^2.1.7",
+    "pinia-plugin-persistedstate": "^3.2.1",
+    "vuetify": "^3.6.11",
+    "@mdi/font": "^7.4.47",
+    "@tanstack/vue-query": "^5.51.1",
+    "vue-apexcharts": "^1.8.0",
+    "apexcharts": "^3.54.0",
+    "axios": "^1.7.2",
+    "decimal.js": "^10.4.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.2",
+    "vite": "^5.3.5",
+    "vite-plugin-vuetify": "^2.0.4",
+    "typescript": "^5.5.3",
+    "vue-tsc": "^2.0.29"
+  }
+}
+```
+
+Note: No `aws-amplify` in MVP — Cognito integration is deferred to Phase 6 (real money / regulatory sandbox). Auth is JWT-based for MVP.
+
+---
+
 ## Database schema (Prisma)
 
-Build the following models in `schema.prisma`. Every table has a `createdAt` and `updatedAt`. The `AuditLog` table is append-only — no updates, no deletes, ever.
+The full canonical schema. Implement exactly as written. The `AuditLog` table is append-only — enforce with a Postgres trigger that blocks UPDATE and DELETE at the database level, not just application level.
 
 ```prisma
-model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  role         Role     // DEPOSITOR | BUSINESS | ADMIN
-  createdAt    DateTime @default(now())
-  depositor    Depositor?
-  business     Business?
+generator client {
+  provider = "prisma-client-js"
 }
 
-enum Role { DEPOSITOR BUSINESS ADMIN }
-
-model Depositor {
-  id            String   @id @default(uuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id])
-  displayName   String
-  walletBalance Decimal  @default(0)   // simulated balance in RM
-  allocations   DepositAllocation[]
-  distributions DistributionCredit[]
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-model DepositAllocation {
-  id            String            @id @default(uuid())
-  depositorId   String
-  depositor     Depositor         @relation(fields: [depositorId], references: [id])
-  investmentId  String
-  investment    InvestmentContract @relation(fields: [investmentId], references: [id])
-  amountRM      Decimal
-  sharePercent  Decimal           // depositor's % share of this pool
-  sectorPref    SectorType[]
-  createdAt     DateTime          @default(now())
-  status        AllocationStatus  // ACTIVE | EXITED | WATCHLIST
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  DEPOSITOR
+  BUSINESS
+  ADMIN
 }
-
-enum AllocationStatus { ACTIVE EXITED WATCHLIST }
-
-model Business {
-  id             String   @id @default(uuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id])
-  legalName      String
-  sector         SectorType
-  dueDiligenceScore Int   // 0–100, must be >= 70 to be eligible
-  status         BusinessStatus  // APPLICANT | APPROVED | ACTIVE | WATCHLIST | EXITED
-  contracts      InvestmentContract[]
-  reports        OutcomeReport[]
-}
-
-enum BusinessStatus { APPLICANT APPROVED ACTIVE WATCHLIST EXITED }
 
 enum SectorType {
   GREEN_ENERGY
@@ -127,65 +292,206 @@ enum SectorType {
   AGRICULTURE
 }
 
-model InvestmentContract {
-  id              String        @id @default(uuid())
-  businessId      String
-  business        Business      @relation(fields: [businessId], references: [id])
-  contractType    ContractType  // MUDARABA | MUSHARAKA | MURABAHA | IJARA | SALAM | WAKALA
-  principalRM     Decimal
-  bankFeeCapPct   Decimal       // hard cap e.g. 0.22 = 22% of gross profit
-  profitSplitPct  Decimal       // depositor pool share e.g. 0.78
-  sector          SectorType
-  startDate       DateTime
-  endDate         DateTime?
-  status          ContractStatus
-  allocations     DepositAllocation[]
-  reports         OutcomeReport[]
-  distributions   Distribution[]
+enum ContractType {
+  MUDARABA
+  MUSHARAKA
+  MURABAHA
+  IJARA
+  SALAM
+  WAKALA
 }
 
-enum ContractType { MUDARABA MUSHARAKA MURABAHA IJARA SALAM WAKALA }
-enum ContractStatus { ACTIVE COMPLETED DEFAULTED WATCHLIST }
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  DEFAULTED
+  WATCHLIST
+}
+
+enum AllocationStatus {
+  ACTIVE
+  EXITED
+  WATCHLIST
+}
+
+enum BusinessStatus {
+  APPLICANT
+  APPROVED
+  ACTIVE
+  WATCHLIST
+  EXITED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  DISPUTED
+  REJECTED
+}
+
+enum DistributionStatus {
+  PENDING
+  EXECUTED
+  FAILED
+}
+
+enum ZakatType {
+  COLLECTED
+  DISBURSED
+}
+
+enum AuditAction {
+  CONTRACT_CREATED
+  CONTRACT_WATCHLISTED
+  CONTRACT_COMPLETED
+  ALLOCATION_CREATED
+  ALLOCATION_EXITED
+  REPORT_SUBMITTED
+  REPORT_VERIFIED
+  REPORT_DISPUTED
+  REPORT_REJECTED
+  DISTRIBUTION_CALCULATED
+  DISTRIBUTION_EXECUTED
+  DISTRIBUTION_FAILED
+  ZAKAT_COLLECTED
+  ZAKAT_DISBURSED
+  BUSINESS_APPROVED
+  BUSINESS_WATCHLISTED
+  SHARIAH_FLAG_RAISED
+  TAWARRUQ_FLAG_RAISED
+  USER_REGISTERED
+  USER_LOGIN
+}
+
+// ─── Core user models ─────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  depositor    Depositor?
+  business     Business?
+  auditLogs    AuditLog[]
+
+  @@index([email])
+}
+
+model Depositor {
+  id            String               @id @default(uuid())
+  userId        String               @unique
+  user          User                 @relation(fields: [userId], references: [id])
+  displayName   String
+  walletBalance Decimal              @default(0) @db.Decimal(18, 2)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  allocations   DepositAllocation[]
+  credits       DistributionCredit[]
+}
+
+model Business {
+  id                 String               @id @default(uuid())
+  userId             String               @unique
+  user               User                 @relation(fields: [userId], references: [id])
+  legalName          String
+  registrationNumber String?
+  sector             SectorType
+  description        String               @db.Text
+  dueDiligenceScore  Int                  @default(0)
+  status             BusinessStatus       @default(APPLICANT)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  contracts          InvestmentContract[]
+  reports            OutcomeReport[]
+}
+
+// ─── Investment models ────────────────────────────────────────────────────────
+
+model InvestmentContract {
+  id                String               @id @default(uuid())
+  businessId        String
+  business          Business             @relation(fields: [businessId], references: [id])
+  contractType      ContractType
+  principalRM       Decimal              @db.Decimal(18, 2)
+  bankFeeCapPct     Decimal              @db.Decimal(5, 4)    // e.g. 0.2200 = 22%
+  depositorSplitPct Decimal              @db.Decimal(5, 4)    // e.g. 0.7800 = 78%
+  sector            SectorType
+  startDate         DateTime
+  endDate           DateTime?
+  status            ContractStatus       @default(ACTIVE)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  allocations       DepositAllocation[]
+  reports           OutcomeReport[]
+  distributions     Distribution[]
+}
+
+model DepositAllocation {
+  id           String             @id @default(uuid())
+  depositorId  String
+  depositor    Depositor          @relation(fields: [depositorId], references: [id])
+  investmentId String
+  investment   InvestmentContract @relation(fields: [investmentId], references: [id])
+  amountRM     Decimal            @db.Decimal(18, 2)
+  sharePercent Decimal            @db.Decimal(10, 8)   // depositor's % of this pool
+  status       AllocationStatus   @default(ACTIVE)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([depositorId])
+  @@index([investmentId])
+}
+
+// ─── Oracle / outcome reporting ───────────────────────────────────────────────
 
 model OutcomeReport {
-  id                String             @id @default(uuid())
-  contractId        String
-  contract          InvestmentContract @relation(fields: [contractId], references: [id])
-  businessId        String
-  business          Business           @relation(fields: [businessId], references: [id])
-  periodStart       DateTime
-  periodEnd         DateTime
-  revenueRM         Decimal
-  expensesRM        Decimal
-  grossProfitRM     Decimal            // computed: revenue - expenses
-  jobsSupported     Int
-  co2AvoidedTonnes  Decimal?           // for green energy sector
-  verificationStatus VerificationStatus // PENDING | VERIFIED | DISPUTED | REJECTED
+  id                 String             @id @default(uuid())
+  contractId         String
+  contract           InvestmentContract @relation(fields: [contractId], references: [id])
+  businessId         String
+  business           Business           @relation(fields: [businessId], references: [id])
+  periodStart        DateTime
+  periodEnd          DateTime
+  revenueRM          Decimal            @db.Decimal(18, 2)
+  expensesRM         Decimal            @db.Decimal(18, 2)
+  grossProfitRM      Decimal            @db.Decimal(18, 2)   // always = revenue - expenses, computed on write
+  jobsSupported      Int                @default(0)
+  co2AvoidedTonnes   Decimal?           @db.Decimal(10, 4)   // green energy sector
+  documentS3Keys     String[]           @default([])          // supporting document references
+  verificationStatus VerificationStatus @default(PENDING)
   verifiedByAdminId  String?
   verifiedAt         DateTime?
+  disputeReason      String?            @db.Text
   createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
   distribution       Distribution?
+
+  @@index([contractId])
+  @@index([verificationStatus])
 }
 
-enum VerificationStatus { PENDING VERIFIED DISPUTED REJECTED }
+// ─── Distribution models ──────────────────────────────────────────────────────
 
 model Distribution {
-  id                String        @id @default(uuid())
-  contractId        String
-  contract          InvestmentContract @relation(fields: [contractId], references: [id])
-  reportId          String        @unique
-  report            OutcomeReport @relation(fields: [reportId], references: [id])
-  grossProfitRM     Decimal
-  bankFeeRM         Decimal
-  zakatRM           Decimal       // 2.5% of bank fee
-  depositorPoolRM   Decimal
-  calculatedAt      DateTime      @default(now())
-  executedAt        DateTime?
-  status            DistributionStatus // PENDING | EXECUTED | FAILED
-  credits           DistributionCredit[]
-}
+  id              String             @id @default(uuid())
+  contractId      String
+  contract        InvestmentContract @relation(fields: [contractId], references: [id])
+  reportId        String             @unique
+  report          OutcomeReport      @relation(fields: [reportId], references: [id])
+  grossProfitRM   Decimal            @db.Decimal(18, 2)
+  bankFeeRM       Decimal            @db.Decimal(18, 2)
+  zakatRM         Decimal            @db.Decimal(18, 2)    // 2.5% of bank fee — always
+  depositorPoolRM Decimal            @db.Decimal(18, 2)
+  status          DistributionStatus @default(PENDING)
+  calculatedAt    DateTime           @default(now())
+  executedAt      DateTime?
+  failureReason   String?            @db.Text
+  credits         DistributionCredit[]
 
-enum DistributionStatus { PENDING EXECUTED FAILED }
+  @@index([status])
+}
 
 model DistributionCredit {
   id             String       @id @default(uuid())
@@ -193,648 +499,551 @@ model DistributionCredit {
   distribution   Distribution @relation(fields: [distributionId], references: [id])
   depositorId    String
   depositor      Depositor    @relation(fields: [depositorId], references: [id])
-  amountRM       Decimal
+  amountRM       Decimal      @db.Decimal(18, 2)
   createdAt      DateTime     @default(now())
+
+  @@index([depositorId])
 }
+
+// ─── Zakat ────────────────────────────────────────────────────────────────────
 
 model ZakatLedger {
-  id          String   @id @default(uuid())
-  source      String   // distributionId that generated this zakat
-  amountRM    Decimal
-  type        ZakatType // COLLECTED | DISBURSED
-  createdAt   DateTime @default(now())
-  note        String?
+  id        String    @id @default(uuid())
+  sourceId  String                          // distributionId (COLLECTED) or reference (DISBURSED)
+  amountRM  Decimal   @db.Decimal(18, 2)
+  type      ZakatType
+  note      String?   @db.Text
+  createdAt DateTime  @default(now())
 }
 
-enum ZakatType { COLLECTED DISBURSED }
+// ─── Audit log — APPEND ONLY. No updates. No deletes. Ever. ──────────────────
 
-// Append-only. No updates. No deletes. Ever.
 model AuditLog {
-  id         String   @id @default(uuid())
-  actorId    String   // userId who triggered action
+  id         String      @id @default(uuid())
+  actorId    String
+  actor      User        @relation(fields: [actorId], references: [id])
   actorRole  Role
-  action     String   // e.g. "CONTRACT_CREATED", "DISTRIBUTION_EXECUTED", "REPORT_VERIFIED"
-  entityType String   // e.g. "InvestmentContract"
+  action     AuditAction
+  entityType String
   entityId   String
-  payload    Json     // full snapshot of relevant data at time of action
-  createdAt  DateTime @default(now())
+  payload    Json
+  createdAt  DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
 }
+```
+
+After applying the schema, add a Postgres trigger to enforce append-only on AuditLog at the database level:
+
+```sql
+-- Run this after prisma migrate dev
+CREATE OR REPLACE FUNCTION prevent_audit_log_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'AuditLog is append-only. Updates and deletes are not permitted.';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER audit_log_no_update
+  BEFORE UPDATE ON "AuditLog"
+  FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_mutation();
+
+CREATE TRIGGER audit_log_no_delete
+  BEFORE DELETE ON "AuditLog"
+  FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_mutation();
 ```
 
 ---
 
 ## Module 1 — Shariah engine (`packages/api/src/lib/shariah-engine/`)
 
-This is the core compliance brain. It runs before any transaction is saved to the database.
+The core compliance brain. Runs before any contract or allocation write. Never bypass it.
 
-### Files to build:
+### `contract-validator.ts`
 
-**`contract-validator.ts`**
-Export a function `validateContract(input: ContractInput): ValidationResult`.
-- Check `contractType` is in the allowed enum
-- If `MURABAHA`: assert `markupFixedAtSigning === true`, assert `markupAccruesOverTime === false`, assert `lateFeeGoesToCharity === true`
-- If `MUDARABA`: assert `bankFeeCapPct <= 0.40` (max 40% of profit)
-- If `MUSHARAKA`: assert both parties have declared capital contribution amounts
-- Return `{ valid: boolean, errors: string[], warnings: string[] }`
+```typescript
+import type { ContractType } from '@prisma/client'
 
-**`sector-exclusion.ts`**
-Export a function `checkSectorExclusion(sector: string, businessDescription: string): ExclusionResult`.
-- Hard-blocked sectors: `ALCOHOL`, `TOBACCO`, `WEAPONS`, `GAMBLING`, `PORNOGRAPHY`, `CONVENTIONAL_INTEREST`
-- Check both the declared sector enum and scan the business description for keywords associated with excluded sectors
-- Return `{ blocked: boolean, reason?: string }`
+export interface ContractInput {
+  contractType: ContractType
+  bankFeeCapPct: number
+  depositorSplitPct: number
+  markupFixedAtSigning?: boolean
+  markupAccruesOverTime?: boolean
+  lateFeeGoesToCharity?: boolean
+}
 
-**`tawarruq-detector.ts`**
-Export a function `detectTawarruqPattern(recentTransactions: Transaction[]): TawarruqFlag`.
-- Pattern: same business appears as both buyer and seller of the same commodity within 48 hours
-- Pattern: financing amount matches sale-back amount within 2% tolerance
-- Return `{ flagged: boolean, confidence: 'HIGH' | 'MEDIUM' | 'LOW', evidence: string }`
+export interface ValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
 
-**`profit-ratio-guard.ts`**
-Export a function `validateProfitSplit(contract: ContractInput): ValidationResult`.
-- Assert `bankFeeCapPct + depositorSplitPct === 1.0` (they must sum to 100%)
-- Assert `bankFeeCapPct <= 0.40` (bank can never take more than 40%)
-- Assert `zakatRate === 0.025` applied to the bank's fee portion
-- Return `{ valid: boolean, errors: string[] }`
+export function validateContract(input: ContractInput): ValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (input.bankFeeCapPct > 0.40) {
+    errors.push(`Bank fee cap ${input.bankFeeCapPct} exceeds maximum allowed 0.40 (40%)`)
+  }
+
+  const sum = input.bankFeeCapPct + input.depositorSplitPct
+  if (Math.abs(sum - 1.0) > 0.0001) {
+    errors.push(`bankFeeCapPct + depositorSplitPct must equal 1.0, got ${sum}`)
+  }
+
+  if (input.contractType === 'MURABAHA') {
+    if (input.markupAccruesOverTime === true)
+      errors.push('MURABAHA: markup must not accrue over time (this would constitute riba)')
+    if (input.markupFixedAtSigning !== true)
+      errors.push('MURABAHA: markup must be fixed at signing')
+    if (input.lateFeeGoesToCharity !== true)
+      warnings.push('MURABAHA: late fees should go to charity, not the bank')
+  }
+
+  return { valid: errors.length === 0, errors, warnings }
+}
+```
+
+### `sector-exclusion.ts`
+
+```typescript
+export interface ExclusionResult {
+  blocked: boolean
+  reason?: string
+}
+
+const BLOCKED_KEYWORDS = [
+  'alcohol', 'liquor', 'beer', 'wine', 'spirits', 'brewery',
+  'tobacco', 'cigarette', 'vaping',
+  'gambling', 'casino', 'betting', 'lottery',
+  'weapons', 'ammunition', 'firearms',
+  'pornography', 'adult content',
+  'interest', 'conventional bank', 'moneylending',
+  'pork', 'swine',
+]
+
+export function checkSectorExclusion(description: string): ExclusionResult {
+  const lower = description.toLowerCase()
+  for (const keyword of BLOCKED_KEYWORDS) {
+    if (lower.includes(keyword)) {
+      return { blocked: true, reason: `Prohibited term found: "${keyword}"` }
+    }
+  }
+  return { blocked: false }
+}
+```
+
+### `tawarruq-detector.ts`
+
+```typescript
+export interface TawarruqFlag {
+  flagged: boolean
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+  evidence: string
+}
+
+interface Transaction {
+  businessId: string
+  counterpartyId: string
+  commodity: string
+  amountRM: number
+  timestamp: Date
+  direction: 'BUY' | 'SELL'
+}
+
+export function detectTawarruqPattern(transactions: Transaction[]): TawarruqFlag {
+  const WINDOW_HOURS = 48
+  const AMOUNT_TOLERANCE = 0.02  // 2%
+
+  for (let i = 0; i < transactions.length; i++) {
+    const buy = transactions[i]
+    if (buy.direction !== 'BUY') continue
+
+    for (let j = i + 1; j < transactions.length; j++) {
+      const sell = transactions[j]
+      if (sell.direction !== 'SELL') continue
+      if (sell.commodity !== buy.commodity) continue
+      if (sell.counterpartyId !== buy.businessId) continue
+
+      const hoursDiff = (sell.timestamp.getTime() - buy.timestamp.getTime()) / 3_600_000
+      if (hoursDiff > WINDOW_HOURS) continue
+
+      const amountDiff = Math.abs(sell.amountRM - buy.amountRM) / buy.amountRM
+      if (amountDiff <= AMOUNT_TOLERANCE) {
+        return {
+          flagged: true,
+          confidence: hoursDiff < 2 ? 'HIGH' : 'MEDIUM',
+          evidence: `Same commodity "${buy.commodity}" bought and sold back within ${hoursDiff.toFixed(1)}h, amounts within ${(amountDiff * 100).toFixed(1)}%`,
+        }
+      }
+    }
+  }
+
+  return { flagged: false, confidence: 'LOW', evidence: 'No Tawarruq pattern detected' }
+}
+```
+
+### `profit-ratio-guard.ts`
+
+```typescript
+import { Decimal } from 'decimal.js'
+
+export interface ProfitDistribution {
+  grossProfitRM: Decimal
+  bankFeeCapPct: Decimal
+}
+
+export interface DistributionBreakdown {
+  grossProfitRM: Decimal
+  bankFeeRM: Decimal
+  zakatRM: Decimal
+  depositorPoolRM: Decimal
+  valid: boolean
+  errors: string[]
+}
+
+const ZAKAT_RATE = new Decimal('0.025')
+const MAX_BANK_FEE_PCT = new Decimal('0.40')
+
+export function calculateDistributionBreakdown(input: ProfitDistribution): DistributionBreakdown {
+  const errors: string[] = []
+
+  if (input.bankFeeCapPct.gt(MAX_BANK_FEE_PCT)) {
+    errors.push(`Bank fee ${input.bankFeeCapPct} exceeds maximum ${MAX_BANK_FEE_PCT}`)
+  }
+
+  const bankFeeRM = input.grossProfitRM.mul(input.bankFeeCapPct).toDecimalPlaces(2)
+  const zakatRM = bankFeeRM.mul(ZAKAT_RATE).toDecimalPlaces(2)
+  const depositorPoolRM = input.grossProfitRM.minus(bankFeeRM).toDecimalPlaces(2)
+
+  return { grossProfitRM: input.grossProfitRM, bankFeeRM, zakatRM, depositorPoolRM, valid: errors.length === 0, errors }
+}
+```
 
 ---
 
 ## Module 2 — Compliance guard (`packages/api/src/lib/compliance-guard/`)
 
-Wraps the Shariah engine and enforces concentration limits at the allocation layer.
-
-**`concentration-limiter.ts`**
-Export `checkConcentration(depositorId: string, targetInvestmentId: string, amountRM: number): ConcentrationResult`.
-- Query current allocations for depositor
-- Block if this allocation would put >5% of depositor's total balance into one business
-- Block if this allocation would put >50% into one sector
-- Return `{ allowed: boolean, reason?: string, currentConcentration: object }`
-
-**`due-diligence-scorer.ts`**
-Export `scoreBusiness(application: BusinessApplication): DueDiligenceScore`.
-Five dimensions, each scored 0–20 (total 0–100):
-1. Financial viability (revenue history, profitability trend, debt level)
-2. Management track record (years in operation, prior defaults)
-3. Sector impact potential (jobs per RM invested, growth trajectory)
-4. Shariah compliance of business model (sector, revenue sources)
-5. Environmental footprint (sector-specific: carbon intensity, waste)
-Return `{ total: number, breakdown: Record<string, number>, eligible: boolean }`.
-Eligible if `total >= 70`.
-
----
-
-## Module 3 — Investment allocation engine
-
-### API routes to build:
-
-**`POST /api/investments`** — Admin creates a new investment contract
-- Runs `validateContract()`, `checkSectorExclusion()`, `validateProfitSplit()`
-- If any check fails, return 400 with detailed errors — never silently ignore
-- On success, write to `InvestmentContract` table + `AuditLog`
-
-**`POST /api/allocations`** — Depositor allocates funds to a pool
-- Runs `checkConcentration()`
-- Deducts from `Depositor.walletBalance`
-- Creates `DepositAllocation` record
-- Writes to `AuditLog`
-
-**`GET /api/investments/:id/health`** — Returns contract health summary
-- Current status, days until next report due, last report summary, watchlist flags
-
-**`POST /api/investments/:id/watchlist`** — Admin flags a contract
-- Updates status, notifies affected depositors (write to notification queue)
-
----
-
-## Module 4 — Oracle (outcome reporting)
-
-This simulates the oracle network for the MVP. The data model is designed so real oracle nodes can replace the admin-approval step later without schema changes.
-
-### API routes:
-
-**`POST /api/reports`** — Business submits monthly outcome report
-- Auth: BUSINESS role only
-- Validate: `periodEnd - periodStart` must be 28–31 days
-- Validate: `grossProfitRM === revenueRM - expensesRM` (computed, not trusted)
-- Set `verificationStatus = PENDING`
-- Trigger notification to admin queue
-
-**`POST /api/reports/:id/verify`** — Admin verifies a report
-- Auth: ADMIN role only
-- Sets `verificationStatus = VERIFIED`, records `verifiedByAdminId` and `verifiedAt`
-- **Immediately triggers distribution calculation** (see Module 5)
-- Writes to `AuditLog`
-
-**`POST /api/reports/:id/dispute`** — Admin disputes a report
-- Auth: ADMIN role only
-- Sets `verificationStatus = DISPUTED`
-- Writes reason to `AuditLog`
-- Triggers watchlist flag on the contract
-
-**Data gap detector (BullMQ job)**
-Schedule: runs daily at 08:00.
-Logic: for every ACTIVE contract, check if a report exists for the previous calendar month. If not, flag the contract to WATCHLIST status and write to AuditLog. This mirrors what real oracle nodes would do with missed data feeds.
-
----
-
-## Module 5 — Profit distribution engine
-
-This is the most critical module. It must be atomic — a distribution either fully executes for all depositors or fully rolls back. Use a Postgres transaction wrapping all writes.
-
-**`calculateDistribution(reportId: string): DistributionCalculation`**
-```
-grossProfit        = report.grossProfitRM
-bankFee            = grossProfit * contract.bankFeeCapPct
-zakatAmount        = bankFee * 0.025
-depositorPool      = grossProfit - bankFee
-// for each depositor allocation:
-depositorCredit[i] = depositorPool * allocation[i].sharePercent
-// verify: sum(depositorCredit) === depositorPool (assert within 0.01 RM rounding)
-```
-Return the full breakdown before writing anything.
-
-**`executeDistribution(calculationId: string): ExecutionResult`**
-Inside a single Postgres transaction:
-1. Create `Distribution` record (status = PENDING)
-2. For each depositor: create `DistributionCredit` + increment `Depositor.walletBalance`
-3. Create `ZakatLedger` entry (type = COLLECTED)
-4. Update `Distribution.status = EXECUTED`, set `executedAt`
-5. Write to `AuditLog` with full payload snapshot
-6. If any step fails: rollback entire transaction, set status = FAILED
-
-**Important**: The bank fee is never "paid out" in the MVP — it stays as a line item in the Distribution record. In the real system this would transfer to the bank's operational account. For MVP, tracking the calculation is enough.
-
----
-
-## Module 6 — Depositor dashboard API
-
-These are the read endpoints that power the frontend.
-
-**`GET /api/depositor/me/portfolio`**
-Returns:
-```json
-{
-  "walletBalance": 10459.57,
-  "totalDeployed": 10000.00,
-  "totalProfitEarned": 459.57,
-  "allocations": [
-    {
-      "investmentId": "...",
-      "businessName": "Sabah Solar Farm 3",
-      "sector": "GREEN_ENERGY",
-      "amountRM": 4200.00,
-      "sharePercent": 0.000872,
-      "status": "ACTIVE",
-      "contractType": "MUSHARAKA",
-      "shariahStatus": "COMPLIANT",
-      "lastReportPeriod": "2025-Q2",
-      "healthStatus": "HEALTHY"
-    }
-  ]
-}
-```
-
-**`GET /api/depositor/me/impact`**
-Returns aggregated impact across all allocations:
-```json
-{
-  "period": "2025-Q2",
-  "financial": {
-    "grossProfitGenerated": 2840000,
-    "yourShare": 459.57,
-    "effectiveAnnualReturn": 0.046,
-    "bankFeeCharged": 624800,
-    "zakatPaid": 15620
-  },
-  "social": {
-    "jobsSupported": 0.047,
-    "smeRevenueGenerated": 18400,
-    "defaultRateYourPool": 0.021
-  },
-  "environmental": {
-    "co2AvoidedTonnes": 0.84,
-    "cleanEnergyMWh": 2.1
-  },
-  "verification": {
-    "shariahAuditStatus": "COMPLIANT",
-    "tawarruqExposurePct": 0,
-    "oracleConfirmationRate": 1.0,
-    "flagsRaised": 0
-  }
-}
-```
-
-**`GET /api/depositor/me/distributions`**
-Paginated list of all past distributions with full profit chain breakdown per distribution.
-
-**`GET /api/depositor/me/audit-trail`**
-All AuditLog entries related to the depositor's allocations and distributions. Read-only. This is their right to inspect.
-
----
-
-## Frontend pages to build
-
-### Depositor app (`/depositor`)
-
-**`/depositor/dashboard`** — Main landing
-- Summary cards: wallet balance, total deployed, profit this quarter, impact score
-- Allocation breakdown donut chart (by sector)
-- Recent distributions list
-
-**`/depositor/portfolio`** — Detailed allocation view
-- Table of all investments with: business name, sector badge, amount, contract type, health status, last report date
-- Clicking a row opens a side panel with full contract details + recent reports
-
-**`/depositor/impact`** — The impact statement
-- Financial return section with full profit chain: gross → fee → your share
-- Social impact metrics (jobs, SME revenue, default rate vs industry)
-- Environmental metrics (CO₂, energy)
-- Verification badges: Shariah compliant, oracle confirmed, Tawarruq 0%
-
-**`/depositor/audit`** — Audit trail
-- Chronological log of every action touching their account
-- Filterable by type (allocation, distribution, contract update, flag)
-
-### Business portal (`/business`)
-
-**`/business/dashboard`** — Overview of active contracts + reporting status
-**`/business/reports/new`** — Submit monthly outcome report form
-**`/business/reports`** — History of submitted reports with verification status
-
-### Admin panel (`/admin`)
-
-**`/admin/applications`** — Review business applications, show due diligence score breakdown
-**`/admin/contracts`** — All active contracts, watchlist flags, health indicators
-**`/admin/reports/pending`** — Queue of unverified outcome reports
-**`/admin/distributions`** — Distribution history, pending executions
-**`/admin/zakat`** — Zakat ledger: collected vs disbursed
-**`/admin/audit`** — Full system-wide audit log
-
----
-
-## Audit logger (`packages/api/src/lib/audit-logger/`)
-
-Every mutating operation in the system calls this. Never skip it.
+### `concentration-limiter.ts`
 
 ```typescript
-// audit-logger.ts
-export async function logAction(params: {
+import type { PrismaClient } from '@prisma/client'
+import { Decimal } from 'decimal.js'
+
+export interface ConcentrationResult {
+  allowed: boolean
+  reason?: string
+}
+
+const MAX_SINGLE_BUSINESS_PCT = new Decimal('0.05')   // 5%
+const MAX_SINGLE_SECTOR_PCT   = new Decimal('0.50')   // 50%
+
+export async function checkConcentration(
+  prisma: PrismaClient,
+  depositorId: string,
+  targetInvestmentId: string,
+  amountRM: Decimal
+): Promise<ConcentrationResult> {
+  const depositor = await prisma.depositor.findUniqueOrThrow({ where: { id: depositorId } })
+  const totalBalance = new Decimal(depositor.walletBalance.toString()).plus(amountRM)
+
+  const allocations = await prisma.depositAllocation.findMany({
+    where: { depositorId, status: 'ACTIVE' },
+    include: { investment: true },
+  })
+
+  // Check single-business concentration
+  const toThisBusiness = allocations
+    .filter(a => a.investmentId === targetInvestmentId)
+    .reduce((sum, a) => sum.plus(a.amountRM.toString()), new Decimal(0))
+    .plus(amountRM)
+
+  if (toThisBusiness.div(totalBalance).gt(MAX_SINGLE_BUSINESS_PCT)) {
+    return { allowed: false, reason: `Would exceed 5% single-business concentration limit` }
+  }
+
+  // Check single-sector concentration
+  const targetInvestment = await prisma.investmentContract.findUniqueOrThrow({ where: { id: targetInvestmentId } })
+  const toThisSector = allocations
+    .filter(a => a.investment.sector === targetInvestment.sector)
+    .reduce((sum, a) => sum.plus(a.amountRM.toString()), new Decimal(0))
+    .plus(amountRM)
+
+  if (toThisSector.div(totalBalance).gt(MAX_SINGLE_SECTOR_PCT)) {
+    return { allowed: false, reason: `Would exceed 50% single-sector concentration limit` }
+  }
+
+  return { allowed: true }
+}
+```
+
+### `due-diligence-scorer.ts`
+
+Five dimensions, each 0–20, total 0–100. Eligible if score ≥ 70.
+
+```typescript
+export interface BusinessApplication {
+  yearsInOperation: number
+  hasDefaultHistory: boolean
+  annualRevenueRM: number
+  debtToEquityRatio: number
+  jobsPerMillionRM: number
+  revenueGrowthPct: number
+  sectorImpactScore: number   // manually assessed 0–20
+  hasExcludedRevenueSources: boolean
+  carbonIntensityScore: number // 0–20, higher = lower carbon
+}
+
+export interface DueDiligenceScore {
+  total: number
+  breakdown: {
+    financialViability: number
+    managementTrackRecord: number
+    sectorImpactPotential: number
+    shariahCompliance: number
+    environmentalFootprint: number
+  }
+  eligible: boolean
+}
+
+export function scoreBusiness(app: BusinessApplication): DueDiligenceScore {
+  const financialViability = Math.min(20,
+    (app.annualRevenueRM > 500_000 ? 8 : 4) +
+    (app.debtToEquityRatio < 1 ? 6 : app.debtToEquityRatio < 2 ? 3 : 0) +
+    (app.revenueGrowthPct > 10 ? 6 : app.revenueGrowthPct > 0 ? 3 : 0)
+  )
+
+  const managementTrackRecord = Math.min(20,
+    Math.min(app.yearsInOperation * 3, 15) +
+    (app.hasDefaultHistory ? 0 : 5)
+  )
+
+  const sectorImpactPotential = Math.min(20,
+    Math.min(app.jobsPerMillionRM * 2, 10) +
+    Math.min(app.sectorImpactScore, 10)
+  )
+
+  const shariahCompliance = app.hasExcludedRevenueSources ? 0 : 20
+
+  const environmentalFootprint = Math.min(20, app.carbonIntensityScore)
+
+  const breakdown = { financialViability, managementTrackRecord, sectorImpactPotential, shariahCompliance, environmentalFootprint }
+  const total = Object.values(breakdown).reduce((a, b) => a + b, 0)
+
+  return { total, breakdown, eligible: total >= 70 }
+}
+```
+
+---
+
+## Module 3 — Audit logger (`packages/api/src/lib/audit-logger/index.ts`)
+
+Every mutating operation calls this. Always pass the active Prisma transaction client.
+
+```typescript
+import type { PrismaClient, Role, AuditAction } from '@prisma/client'
+
+interface LogParams {
+  prisma: PrismaClient
   actorId: string
   actorRole: Role
-  action: AuditAction      // enum of all action types
+  action: AuditAction
   entityType: string
   entityId: string
   payload: Record<string, unknown>
-  tx: PrismaTransactionClient  // always pass the active transaction
-}): Promise<void>
-```
+}
 
-`AuditAction` enum must include at minimum:
-`CONTRACT_CREATED`, `CONTRACT_WATCHLISTED`, `ALLOCATION_CREATED`, `ALLOCATION_EXITED`,
-`REPORT_SUBMITTED`, `REPORT_VERIFIED`, `REPORT_DISPUTED`,
-`DISTRIBUTION_CALCULATED`, `DISTRIBUTION_EXECUTED`, `DISTRIBUTION_FAILED`,
-`ZAKAT_COLLECTED`, `ZAKAT_DISBURSED`,
-`BUSINESS_APPROVED`, `BUSINESS_WATCHLISTED`,
-`SHARIAH_FLAG_RAISED`, `TAWARRUQ_FLAG_RAISED`
-
----
-
-## Critical implementation rules
-
-These are non-negotiable. They are what makes this system different from a normal CRUD app.
-
-1. **Shariah engine runs before every contract or allocation write.** Never bypass it. If a route needs to skip validation for testing, throw an error instead — don't add a bypass flag.
-
-2. **AuditLog is append-only.** Add a Postgres trigger that prevents UPDATE and DELETE on the `AuditLog` table. This is enforced at the database level, not just the application level.
-
-3. **Distribution execution uses a Postgres transaction.** All credits for a distribution happen atomically. A partial distribution (some depositors credited, others not) must never be possible.
-
-4. **Profit calculation is deterministic and recorded.** The `Distribution` record stores the full calculation breakdown. It must be possible to re-derive every depositor's credit from the stored data independently.
-
-5. **Bank fee cap is enforced in code, not config.** The `bankFeeCapPct` on a contract is set at contract creation and never mutated. The distribution calculator reads it from the contract record — it does not accept it as a parameter at distribution time.
-
-6. **No soft deletes on financial records.** Contracts, allocations, reports, distributions — these are never deleted. Status fields change. Records stay.
-
-7. **All monetary values use `Decimal` type** (via `decimal.js` in application code, `Decimal` in Prisma). Never use JavaScript `number` for money. Floating point errors in financial calculations are unacceptable.
-
----
-
-## Seed data for development
-
-Create a seed script (`prisma/seed.ts`) that generates:
-- 3 depositor accounts (small: RM 5k, medium: RM 25k, large: RM 100k)
-- 1 admin account
-- 5 business accounts across different sectors (2 green energy, 2 SME, 1 housing)
-- 3 active investment contracts (one per sector type)
-- 6 months of outcome reports for each contract (all verified)
-- Corresponding distributions already executed
-- Resulting depositor balances reflecting accumulated profit
-
-This means the dashboard works on first launch — never demo on empty state.
-
----
-
-## Environment variables
-
-```env
-DATABASE_URL=postgresql://amanat:amanat@localhost:5432/amanat
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=change-in-production-minimum-32-chars
-JWT_EXPIRY=15m
-REFRESH_TOKEN_EXPIRY=7d
-PORT=3001
-NODE_ENV=development
+export async function logAction({ prisma, actorId, actorRole, action, entityType, entityId, payload }: LogParams): Promise<void> {
+  await (prisma as PrismaClient).auditLog.create({
+    data: { actorId, actorRole, action, entityType, entityId, payload },
+  })
+}
 ```
 
 ---
 
-## Docker Compose (local dev)
+## Module 4 — Distribution engine
 
-```yaml
-version: '3.8'
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: amanat
-      POSTGRES_PASSWORD: amanat
-      POSTGRES_DB: amanat
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+The most critical module. All steps must be atomic — use a Postgres transaction wrapping all writes.
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-volumes:
-  pgdata:
-```
-
----
-
-## Build order for Claude Code
-
-Work in this exact sequence. Each step produces something runnable before moving on.
-
-1. `docker-compose up -d` → Postgres + Redis running
-2. Scaffold monorepo structure + install dependencies
-3. Write `schema.prisma` → run `prisma migrate dev` → verify tables created
-4. Build `audit-logger` → unit test it
-5. Build `shariah-engine` modules one by one → unit test each
-6. Build `compliance-guard` modules → unit test
-7. Build auth module (register / login / refresh) → integration test
-8. Build investments module (contract CRUD + validation) → integration test
-9. Build allocations module → integration test
-10. Build oracle module (report submit + verify) → integration test
-11. Build distribution engine → integration test with full atomic rollback test
-12. Build all read/portfolio/impact API endpoints
-13. Run seed script → verify data looks correct via API
-14. Build React app shell + routing + auth context
-15. Build depositor dashboard page (connect to real API)
-16. Build depositor portfolio page
-17. Build depositor impact page
-18. Build business reporting portal
-19. Build admin panel pages
-20. End-to-end test: create depositor → allocate funds → submit report → verify → distribute → check dashboard shows correct numbers
-
----
-
-## What success looks like
-
-At the end of the MVP build, you should be able to do this live demo:
-
-1. Log in as a depositor → see wallet balance, allocation breakdown, impact metrics
-2. Navigate to impact statement → see full profit chain with every number traceable
-3. Log in as a business → submit a monthly outcome report
-4. Log in as admin → verify the report → watch distribution execute automatically
-5. Log back in as depositor → see wallet balance increased, new distribution in history, impact metrics updated
-6. Navigate to audit trail → show every step that happened, timestamped and immutable
-
-That demo, with real numbers and a clean UI, is what you show to a co-founder, early investor, or BNM sandbox application.
-
----
-
-## Notes for future phases
-
-- **Phase 4 (blockchain):** The `AuditLog` table structure mirrors what a blockchain ledger would store. Migration path: write a sync job that hashes each `AuditLog` entry and posts it to a Hyperledger Fabric channel. No schema changes needed.
-- **Phase 5 (real oracle):** The `verificationStatus` workflow in `OutcomeReport` is already designed for multi-node consensus. Replace the single admin approval with a 2-of-3 oracle node voting contract.
-- **Phase 6 (real money):** Swap `Depositor.walletBalance` (simulated) for API calls to DuitNow or FPX. The business logic around distributions does not change.
-- **Phase 7 (ML anomaly detection):** The `AuditLog` is your training dataset. Every flag, every unusual pattern, is already recorded. The ML layer reads from this table.
-
----
-
-## AWS cloud-native architecture
-
-### Core principle
-Every AWS service choice maps to a specific Amanat requirement. Nothing is added because it sounds modern.
-
-### Service map
-
-| AWS Service | Replaces | Amanat purpose |
-|---|---|---|
-| ECS Fargate | Docker Compose | Runs Node.js API — scales to zero, no server management |
-| Lambda | BullMQ workers | Event-triggered distribution execution, daily watchlist scan |
-| RDS PostgreSQL | Local Postgres | Primary data store — balances, contracts, allocations |
-| **QLDB** | AuditLog table | Cryptographically verifiable, append-only ledger — tamper-proof audit trail |
-| ElastiCache Redis | Local Redis | Session cache, rate limiting |
-| S3 | Local file storage | Business document uploads (financial statements, invoices) |
-| **EventBridge** | BullMQ event bus | ReportVerified event → triggers distribution Lambda automatically |
-| SQS + DLQ | BullMQ queues | Dead-letter queue — failed distributions never silently disappear |
-| SNS | Custom notifications | Fan-out: email depositor + update dashboard on distribution |
-| **Cognito** | Custom JWT auth | MFA, token management — required for fintech |
-| **KMS** | Nothing (gap) | Encrypt PII and financial data at rest — required for BNM compliance |
-| Secrets Manager | .env files | Rotate DB credentials automatically, no secrets in code |
-| CloudFront + S3 | Manual frontend hosting | React app — global CDN, SSL, near-zero cost |
-| API Gateway | Manual routing | Rate limiting, auth verification, single stable endpoint |
-| CloudTrail | Nothing (gap) | Every AWS API call logged — infrastructure-level audit for BNM |
-| **CDK** | Manual console | All infrastructure as TypeScript code — version controlled, reproducible |
-| CodePipeline + CodeBuild | Manual deploys | Every deploy is automated, logged, reversible |
-| CloudWatch | Console.log | Centralised logs, alarms on DLQ messages and Lambda failures |
-
-**Bold** = services unique to this stack that you cannot trivially replicate yourself.
-
-### The distribution event flow (most important)
-
-```
-Admin verifies OutcomeReport
-        ↓
-EventBridge: { type: "REPORT_VERIFIED", reportId, contractId }
-        ↓
-Lambda: distribution-calculator
-  - reads report + contract from RDS
-  - calculates: gross → bankFee → zakat → depositorPool → per-depositor credits
-  - writes Distribution record to RDS (status: PENDING)
-  - writes calculation proof to QLDB
-        ↓
-Lambda: distribution-executor (triggered by DISTRIBUTION_CALCULATED event)
-  - opens Postgres transaction
-  - credits each depositor wallet
-  - updates Distribution status to EXECUTED
-  - closes transaction (atomic)
-        ↓
-QLDB write: execution proof (hash of all credits)
-        ↓
-SNS publish: { type: "DISTRIBUTION_EXECUTED", depositorIds[], amounts[] }
-        ↓
-  → SES: email each depositor
-  → WebSocket (API Gateway): push dashboard update
-  → CloudWatch: log metric
-
-If any Lambda fails → SQS DLQ catches event → CloudWatch alarm → engineer alerted
-```
-
-### Infrastructure as Code (CDK) structure
-
-```
-infrastructure/
-├── lib/
-│   ├── stacks/
-│   │   ├── database-stack.ts      # RDS, ElastiCache, QLDB
-│   │   ├── compute-stack.ts       # ECS cluster, ECR, Fargate services
-│   │   ├── lambda-stack.ts        # All Lambda functions + event mappings
-│   │   ├── events-stack.ts        # EventBridge rules, SQS queues, SNS topics
-│   │   ├── security-stack.ts      # Cognito, KMS keys, Secrets Manager
-│   │   ├── cdn-stack.ts           # CloudFront, S3 frontend bucket
-│   │   └── pipeline-stack.ts      # CodePipeline CI/CD
-│   └── constructs/
-│       ├── amanat-api.ts          # ECS Fargate service + API Gateway
-│       ├── distribution-workflow.ts # EventBridge + Lambdas for distribution
-│       └── audit-ledger.ts        # QLDB + write helper
-└── bin/
-    └── amanat.ts                  # CDK app entry point
-```
-
-### Updated repository structure (with AWS)
-
-```
-amanat/
-├── packages/
-│   ├── api/                       # Fastify on ECS Fargate (unchanged)
-│   ├── web/                       # React on CloudFront/S3 (unchanged)
-│   ├── lambdas/                   # NEW: Lambda functions
-│   │   ├── distribution-calculator/
-│   │   ├── distribution-executor/
-│   │   ├── watchlist-scanner/     # daily data-gap detection
-│   │   └── zakat-allocator/
-│   └── infrastructure/            # NEW: CDK stacks
-├── docker-compose.yml             # still used for local dev
-└── README.md
-```
-
-### QLDB — what to write and when
-
-Replace the Postgres `AuditLog` table with QLDB. Every QLDB document maps to one of these actions:
+### Calculation (pure function — no DB writes)
 
 ```typescript
-// Each document written to QLDB:
-interface LedgerEntry {
-  type: AuditAction          // same enum as before
-  actorId: string
-  actorRole: string
-  entityType: string
-  entityId: string
-  payload: Record<string, unknown>  // full snapshot
-  timestamp: string          // ISO 8601
-  // QLDB automatically adds: blockAddress, hash, metadata
+import { Decimal } from 'decimal.js'
+import { calculateDistributionBreakdown } from '../lib/shariah-engine/profit-ratio-guard'
+
+export async function calculateDistribution(prisma: PrismaClient, reportId: string) {
+  const report = await prisma.outcomeReport.findUniqueOrThrow({
+    where: { id: reportId },
+    include: { contract: { include: { allocations: { where: { status: 'ACTIVE' } } } } },
+  })
+
+  const breakdown = calculateDistributionBreakdown({
+    grossProfitRM: new Decimal(report.grossProfitRM.toString()),
+    bankFeeCapPct: new Decimal(report.contract.bankFeeCapPct.toString()),
+  })
+
+  if (!breakdown.valid) throw new Error(`Distribution invalid: ${breakdown.errors.join(', ')}`)
+
+  const credits = report.contract.allocations.map(allocation => ({
+    depositorId: allocation.depositorId,
+    amountRM: breakdown.depositorPoolRM
+      .mul(new Decimal(allocation.sharePercent.toString()))
+      .toDecimalPlaces(2),
+  }))
+
+  // Verify credits sum matches depositorPool (within RM 0.01 rounding tolerance)
+  const creditSum = credits.reduce((sum, c) => sum.plus(c.amountRM), new Decimal(0))
+  if (breakdown.depositorPoolRM.minus(creditSum).abs().gt(new Decimal('0.01'))) {
+    throw new Error(`Credit sum ${creditSum} does not match depositorPool ${breakdown.depositorPoolRM}`)
+  }
+
+  return { breakdown, credits, report }
 }
 ```
 
-The QLDB `GetRevision` API lets you prove to a regulator or court that a specific record existed at a specific time and was never altered — using a cryptographic proof that anyone can verify independently.
+### Execution (atomic Postgres transaction)
 
-### Local dev: still uses Docker Compose
+```typescript
+export async function executeDistribution(prisma: PrismaClient, reportId: string, actorId: string) {
+  const { breakdown, credits, report } = await calculateDistribution(prisma, reportId)
 
-For local development, keep using Docker Compose (Postgres + Redis). AWS services are only used in the deployed environment. Use AWS SAM or LocalStack for local Lambda testing.
+  return await prisma.$transaction(async (tx) => {
+    // 1. Create Distribution record
+    const distribution = await tx.distribution.create({
+      data: {
+        contractId: report.contractId,
+        reportId,
+        grossProfitRM: breakdown.grossProfitRM.toFixed(2),
+        bankFeeRM: breakdown.bankFeeRM.toFixed(2),
+        zakatRM: breakdown.zakatRM.toFixed(2),
+        depositorPoolRM: breakdown.depositorPoolRM.toFixed(2),
+        status: 'PENDING',
+      },
+    })
 
-### Build order update (AWS additions)
+    // 2. Create credits + increment depositor balances
+    for (const credit of credits) {
+      await tx.distributionCredit.create({
+        data: { distributionId: distribution.id, depositorId: credit.depositorId, amountRM: credit.amountRM.toFixed(2) },
+      })
+      await tx.depositor.update({
+        where: { id: credit.depositorId },
+        data: { walletBalance: { increment: credit.amountRM.toNumber() } },
+      })
+    }
 
-After completing the original build steps 1–20, add:
+    // 3. Zakat ledger entry
+    await tx.zakatLedger.create({
+      data: { sourceId: distribution.id, amountRM: breakdown.zakatRM.toFixed(2), type: 'COLLECTED', note: `Auto from distribution ${distribution.id}` },
+    })
 
-21. Set up CDK project + database-stack (RDS + QLDB in AWS)
-22. Replace Postgres AuditLog with QLDB writes
-23. Add Cognito — replace custom JWT auth
-24. Deploy API to ECS Fargate via compute-stack
-25. Set up EventBridge rule: ReportVerified → distribution-calculator Lambda
-26. Implement distribution-calculator Lambda
-27. Implement distribution-executor Lambda
-28. Set up SQS DLQ + CloudWatch alarm on DLQ
-29. Deploy frontend to CloudFront via cdn-stack
-30. Set up CodePipeline for automated deploys
-31. End-to-end test on AWS: full flow from report verification to depositor wallet credit
+    // 4. Mark distribution executed
+    await tx.distribution.update({
+      where: { id: distribution.id },
+      data: { status: 'EXECUTED', executedAt: new Date() },
+    })
 
-### Estimated cost: MVP on AWS
+    // 5. Audit log (inside the same transaction)
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        actorRole: 'ADMIN',
+        action: 'DISTRIBUTION_EXECUTED',
+        entityType: 'Distribution',
+        entityId: distribution.id,
+        payload: { reportId, grossProfitRM: breakdown.grossProfitRM.toFixed(2), bankFeeRM: breakdown.bankFeeRM.toFixed(2), zakatRM: breakdown.zakatRM.toFixed(2), depositorPoolRM: breakdown.depositorPoolRM.toFixed(2), creditCount: credits.length },
+      },
+    })
 
-| Service | Monthly cost |
-|---|---|
-| ECS Fargate (2 tasks) | ~$18 |
-| RDS PostgreSQL (t4g.micro) | ~$15 |
-| QLDB (low volume) | ~$5 |
-| ElastiCache Redis (t4g.micro) | ~$12 |
-| Lambda + EventBridge + SQS | ~$1 |
-| CloudFront + S3 | ~$1 |
-| Cognito (under 50k MAU) | $0 |
-| CloudWatch + CloudTrail + KMS | ~$8 |
-| **Total** | **~$61/month** |
-
-Apply for AWS Activate startup credits ($5k–$100k depending on stage). At $61/month, even $5k covers the first 6 years of MVP infrastructure.
-
-### Data residency for BNM compliance
-
-Deploy to **ap-southeast-1 (Singapore)**. This is the closest AWS region to Malaysia with the regulatory data residency guarantees BNM requires. Do not use ap-southeast-3 (Jakarta) for the primary region — BNM sandbox applications specifically reference Singapore.
-
+    return distribution
+  })
+}
+```
 
 ---
 
-## Frontend stack: Vue 3 + Vuetify 3 + Pinia
+## API routes reference
 
-The backend, AWS architecture, and database schema are unchanged. Only the frontend packages differ from the original spec.
+### Auth
+- `POST /api/auth/register` — create user (role in body: DEPOSITOR | BUSINESS | ADMIN)
+- `POST /api/auth/login` — returns access token in JSON + sets refresh token in httpOnly cookie
+- `POST /api/auth/refresh` — reads refresh cookie, returns new access token
+- `POST /api/auth/logout` — clears refresh cookie
 
-### Package list
+### Depositor
+- `GET /api/depositor/me/portfolio` — balance, allocations, health per contract
+- `GET /api/depositor/me/impact` — financial + social + environmental metrics, verification badges
+- `GET /api/depositor/me/distributions` — paginated distribution history with full profit chain
+- `GET /api/depositor/me/audit-trail` — paginated audit log for this depositor
 
-```json
-{
-  "dependencies": {
-    "vue": "^3.4.0",
-    "vue-router": "^4.3.0",
-    "pinia": "^2.1.0",
-    "pinia-plugin-persistedstate": "^3.2.0",
-    "vuetify": "^3.6.0",
-    "@mdi/font": "^7.4.0",
-    "@tanstack/vue-query": "^5.40.0",
-    "vue-apexcharts": "^1.8.0",
-    "apexcharts": "^3.49.0",
-    "axios": "^1.7.0",
-    "decimal.js": "^10.4.0",
-    "aws-amplify": "^6.3.0",
-    "@aws-amplify/ui-vue": "^4.1.0"
-  },
-  "devDependencies": {
-    "vite": "^5.3.0",
-    "vite-plugin-vuetify": "^2.0.0",
-    "@vitejs/plugin-vue": "^5.0.0",
-    "typescript": "^5.4.0",
-    "vue-tsc": "^2.0.0"
-  }
-}
-```
+### Investments (admin)
+- `POST /api/contracts` — create contract (runs Shariah engine validation)
+- `GET /api/contracts` — list all contracts with status and health
+- `PATCH /api/contracts/:id/watchlist` — flag a contract
 
-### Vuetify theme (Amanat colour palette)
+### Allocations (depositor)
+- `POST /api/allocations` — allocate funds (runs concentration check)
+- `DELETE /api/allocations/:id` — exit an allocation
+
+### Oracle (business + admin)
+- `POST /api/reports` — business submits monthly outcome report
+- `GET /api/reports?status=PENDING` — admin fetches unverified queue
+- `POST /api/reports/:id/verify` — admin verifies → triggers distribution automatically
+- `POST /api/reports/:id/dispute` — admin disputes with reason
+
+### Businesses (admin)
+- `GET /api/businesses?status=APPLICANT` — review queue
+- `POST /api/businesses/:id/approve` — approve with due diligence score
+- `POST /api/businesses/:id/watchlist` — flag business
+
+### Distributions (admin)
+- `GET /api/distributions` — paginated list with status
+- `GET /api/distributions/:id` — full breakdown + per-depositor credits
+
+### Zakat (admin)
+- `GET /api/zakat` — ledger with running balance
+- `POST /api/zakat/disburse` — record a disbursement
+
+---
+
+## Frontend — Vue 3 + Vuetify 3 + Pinia
+
+### Core rules
+
+1. **Server state in Vue Query, client state in Pinia — never cross them.** API response data never goes into Pinia stores. If two components need the same API data, they both call the same `useQuery` composable — Vue Query deduplicates and caches.
+
+2. **Never use `parseFloat()` or JS `number` for money.** Parse all monetary input with `new Decimal(value)` (decimal.js). Display with a global `formatRM(value)` composable using `Intl.NumberFormat('ms-MY', { style: 'currency', currency: 'MYR' })`.
+
+3. **Token in memory only.** `accessToken` in Pinia auth store is never written to localStorage or sessionStorage. Axios interceptor attaches it to requests. Refresh token lives in an httpOnly cookie set by the server.
+
+4. **Vuetify tree-shaking is required.** `vite-plugin-vuetify` with `autoImport: true` must be configured in `vite.config.ts`. Without it the Vuetify bundle is ~1.5MB uncompressed.
+
+5. **Server-side pagination for all large tables.** `v-data-table` with `:items-length="totalCount"` + `@update:options` handler. Never load all rows into the DOM.
+
+### Vuetify theme
 
 ```typescript
 // src/plugins/vuetify.ts
 import { createVuetify } from 'vuetify'
+import { aliases, mdi } from 'vuetify/iconsets/mdi'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
 
-export default createVuetify({
+export const vuetify = createVuetify({
+  icons: { defaultSet: 'mdi', aliases, sets: { mdi } },
   theme: {
     defaultTheme: 'amanatLight',
     themes: {
       amanatLight: {
+        dark: false,
         colors: {
-          primary:    '#1A6B4A',  // deep green
-          secondary:  '#C8960C',  // gold
+          primary:    '#1A6B4A',   // deep green — trust
+          secondary:  '#C8960C',   // gold — prosperity
           success:    '#2D7A4F',
           warning:    '#B86A00',
           error:      '#C0392B',
@@ -845,162 +1054,392 @@ export default createVuetify({
       },
     },
   },
+  defaults: {
+    VCard:      { elevation: 1, rounded: 'lg' },
+    VBtn:       { rounded: 'lg' },
+    VTextField: { variant: 'outlined', density: 'comfortable' },
+    VSelect:    { variant: 'outlined', density: 'comfortable' },
+    VDataTable: { hover: true },
+  },
 })
 ```
 
-### Pinia stores — three stores, nothing more
-
-**Rule:** server state lives in Vue Query. Pinia holds only auth, UI notifications, and UI preferences. Never put API response data in Pinia.
+### Pinia stores
 
 ```typescript
-// stores/auth.ts
+// stores/auth.ts — Composition API style
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(null)
-  const accessToken = ref<string | null>(null)  // memory only — never localStorage
+export interface AuthUser {
+  id: string
+  email: string
+  role: 'DEPOSITOR' | 'BUSINESS' | 'ADMIN'
+}
 
-  const isAuthenticated = computed(() => !!user.value)
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<AuthUser | null>(null)
+  const accessToken = ref<string | null>(null)  // memory only
+
+  const isAuthenticated = computed(() => !!user.value && !!accessToken.value)
   const isDepositor = computed(() => user.value?.role === 'DEPOSITOR')
   const isBusiness  = computed(() => user.value?.role === 'BUSINESS')
   const isAdmin     = computed(() => user.value?.role === 'ADMIN')
 
-  async function login(email: string, password: string) {
-    const { token, userData } = await authApi.login(email, password)
-    accessToken.value = token
+  function setAuth(userData: AuthUser, token: string) {
     user.value = userData
+    accessToken.value = token
   }
 
-  function logout() {
+  function clearAuth() {
     user.value = null
     accessToken.value = null
   }
 
-  return { user, accessToken, isAuthenticated, isDepositor, isBusiness, isAdmin, login, logout }
+  return { user, accessToken, isAuthenticated, isDepositor, isBusiness, isAdmin, setAuth, clearAuth }
 })
 
 // stores/notifications.ts
-export const useNotificationStore = defineStore('notifications', () => {
-  const items = ref<Array<{ id: string; message: string; type: 'success'|'error'|'warning'|'info' }>>([])
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
 
-  function push(message: string, type: typeof items.value[0]['type']) {
+type NotificationType = 'success' | 'error' | 'warning' | 'info'
+interface Notification { id: string; message: string; type: NotificationType }
+
+export const useNotificationStore = defineStore('notifications', () => {
+  const items = ref<Notification[]>([])
+
+  function push(message: string, type: NotificationType, durationMs = 4000) {
     const id = crypto.randomUUID()
     items.value.push({ id, message, type })
-    setTimeout(() => dismiss(id), 4000)
+    if (durationMs > 0) setTimeout(() => dismiss(id), durationMs)
+    return id
   }
 
   const success = (msg: string) => push(msg, 'success')
-  const error   = (msg: string) => push(msg, 'error')
+  const error   = (msg: string) => push(msg, 'error', 6000)
   const warn    = (msg: string) => push(msg, 'warning')
+  const info    = (msg: string) => push(msg, 'info')
 
-  function dismiss(id: string) {
-    items.value = items.value.filter(i => i.id !== id)
-  }
+  function dismiss(id: string) { items.value = items.value.filter(n => n.id !== id) }
 
-  return { items, success, error, warn, dismiss }
+  return { items, success, error, warn, info, dismiss }
 })
+
+// stores/preferences.ts — persisted to localStorage (UI prefs only, nothing financial)
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+
+export const usePreferencesStore = defineStore('preferences', () => {
+  const selectedPeriod = ref('current')
+  const sidebarOpen    = ref(true)
+  return { selectedPeriod, sidebarOpen }
+}, { persist: true })
 ```
 
-### Vue Query composables (server state)
+### Axios client
+
+```typescript
+// api/client.ts
+import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
+
+export const apiClient = axios.create({
+  baseURL: '/api',
+  withCredentials: true,  // httpOnly refresh token cookie
+  headers: { 'Content-Type': 'application/json' },
+})
+
+apiClient.interceptors.request.use((config) => {
+  const auth = useAuthStore()
+  if (auth.accessToken) config.headers.Authorization = `Bearer ${auth.accessToken}`
+  return config
+})
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      useAuthStore().clearAuth()
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+```
+
+### Vue Query composables pattern
 
 ```typescript
 // composables/usePortfolio.ts
 import { useQuery } from '@tanstack/vue-query'
+import { apiClient } from '@/api/client'
 
 export function usePortfolio() {
   return useQuery({
     queryKey: ['portfolio'],
-    queryFn: () => api.get('/depositor/me/portfolio'),
+    queryFn: async () => {
+      const { data } = await apiClient.get('/depositor/me/portfolio')
+      return data
+    },
     staleTime: 30_000,
   })
 }
 
 // composables/useImpact.ts
+import type { Ref } from 'vue'
+
 export function useImpactStatement(period: Ref<string>) {
   return useQuery({
-    queryKey: ['impact', period],  // reactive — refetches when period changes
-    queryFn: () => api.get(`/depositor/me/impact?period=${period.value}`),
+    queryKey: ['impact', period],   // reactive — query re-runs when period changes
+    queryFn: async () => {
+      const { data } = await apiClient.get(`/depositor/me/impact?period=${period.value}`)
+      return data
+    },
   })
 }
 ```
 
-### Key Vuetify component decisions
+### Vuetify component map
 
-| UI element | Vuetify component | Notes |
+| UI element | Vuetify component | Key props / notes |
 |---|---|---|
-| Portfolio table | `v-data-table` | Server-side pagination — pass `:items-length` + handle `@update:options` |
-| Investment detail | `v-navigation-drawer` temporary | Right side, opens on row click |
-| Status badges | `v-chip` with color prop | VERIFIED=success, PENDING=warning, DISPUTED=error |
-| Distribution workflow | `v-stepper` | Shows Calculate → Validate → Execute → Credit stages |
-| Audit timeline | `v-timeline` | Chronological log with icon per action type |
-| Report form | `v-form` + `v-text-field` | Built-in `:rules` validation — no extra library |
-| Global notifications | `v-snackbar` | Driven by `useNotificationStore` — one outlet in App.vue |
-| Loading states | `v-skeleton-loader` | Driven by Vue Query `isLoading` — swap out per component |
+| Portfolio table | `v-data-table` | `:items-length` + `@update:options` for server pagination |
+| Investment detail panel | `v-navigation-drawer` | `temporary` + right side — opens on row click |
+| Status badges | `v-chip` | `color="success/warning/error"` per status |
+| Distribution workflow | `v-stepper` | Calculate → Validate → Execute → Credit stages |
+| Audit timeline | `v-timeline` | MDI icon per action type, alternating sides |
+| Report form | `v-form` + `v-text-field` | Built-in `:rules` — no extra validation library |
+| Global notifications | `v-snackbar` | One outlet in `App.vue`, driven by `useNotificationStore` |
+| Loading skeletons | `v-skeleton-loader` | Driven by Vue Query `isLoading` flag |
+| Summary cards | `v-card` in `v-row`/`v-col` | `cols="12" sm="6" md="3"` responsive grid |
+| Sector breakdown chart | `VueApexCharts` donut | Inside a `v-card` |
+| Document upload | `v-file-input` | Progress via `v-progress-linear` |
 
-### Critical implementation rules (Vue-specific)
+### Vue Router with role guards
 
-1. **Never use `parseFloat()` for money.** All monetary inputs parsed with `new Decimal(value)` from decimal.js before API calls. Display with a global `formatRM(value)` composable using `Intl.NumberFormat`.
+```typescript
+// plugins/router.ts
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
-2. **v-data-table pagination must be server-side** for audit logs and large datasets. Pass `:server-items-length="totalCount"` and handle `@update:options` to call the API with `page` and `itemsPerPage` params.
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/login', name: 'login', component: () => import('@/pages/auth/LoginPage.vue'), meta: { public: true } },
+    {
+      path: '/depositor',
+      component: () => import('@/layouts/DepositorLayout.vue'),
+      meta: { role: 'DEPOSITOR' },
+      children: [
+        { path: '', redirect: '/depositor/dashboard' },
+        { path: 'dashboard', name: 'depositor-dashboard', component: () => import('@/pages/depositor/DashboardPage.vue') },
+        { path: 'portfolio',  name: 'depositor-portfolio', component: () => import('@/pages/depositor/PortfolioPage.vue') },
+        { path: 'impact',     name: 'depositor-impact',    component: () => import('@/pages/depositor/ImpactPage.vue') },
+        { path: 'audit',      name: 'depositor-audit',     component: () => import('@/pages/depositor/AuditPage.vue') },
+      ],
+    },
+    {
+      path: '/business',
+      component: () => import('@/layouts/BusinessLayout.vue'),
+      meta: { role: 'BUSINESS' },
+      children: [
+        { path: '', redirect: '/business/dashboard' },
+        { path: 'dashboard',  name: 'business-dashboard',   component: () => import('@/pages/business/DashboardPage.vue') },
+        { path: 'reports',    name: 'business-reports',     component: () => import('@/pages/business/ReportsPage.vue') },
+        { path: 'reports/new', name: 'business-report-new', component: () => import('@/pages/business/ReportNewPage.vue') },
+      ],
+    },
+    {
+      path: '/admin',
+      component: () => import('@/layouts/AdminLayout.vue'),
+      meta: { role: 'ADMIN' },
+      children: [
+        { path: '', redirect: '/admin/applications' },
+        { path: 'applications',  name: 'admin-applications',  component: () => import('@/pages/admin/ApplicationsPage.vue') },
+        { path: 'contracts',     name: 'admin-contracts',     component: () => import('@/pages/admin/ContractsPage.vue') },
+        { path: 'reports',       name: 'admin-reports',       component: () => import('@/pages/admin/ReportQueuePage.vue') },
+        { path: 'distributions', name: 'admin-distributions', component: () => import('@/pages/admin/DistributionsPage.vue') },
+        { path: 'zakat',         name: 'admin-zakat',         component: () => import('@/pages/admin/ZakatPage.vue') },
+      ],
+    },
+    { path: '/', redirect: '/login' },
+    { path: '/:pathMatch(.*)*', redirect: '/login' },
+  ],
+})
 
-3. **Token never goes in localStorage.** `accessToken` in Pinia auth store is in-memory only. Use an axios interceptor to attach it to requests. Use a refresh token in an httpOnly cookie for persistence across page loads — configure this server-side.
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if (to.meta.public) return true
+  if (!auth.isAuthenticated) return '/login'
+  const required = to.meta.role as string | undefined
+  if (required && auth.user?.role !== required) return '/login'
+  return true
+})
 
-4. **Vue Query is the cache.** Do not copy API responses into Pinia. If two components need the same data, they both call the same `useQuery` composable — Vue Query deduplicates the request and shares the cache.
+export default router
+```
 
-5. **Vuetify tree-shaking is required.** Use `vite-plugin-vuetify` with `autoImport: true`. Without this, the full Vuetify bundle is ~1.5MB. With tree-shaking, only used components are bundled.
+---
 
-### File structure
+## Critical implementation rules
+
+These are non-negotiable. They are what makes Amanat different from a normal CRUD app.
+
+1. **Shariah engine runs before every contract or allocation write.** If validation fails, return 400 with the full `errors` array. Never silently skip validation.
+
+2. **AuditLog is append-only at the database level.** The Postgres trigger (see schema section) blocks UPDATE and DELETE. The application-level check is a second layer, not the only layer.
+
+3. **Distribution execution is a single Postgres transaction.** All depositor credits happen atomically. A partial distribution (some depositors credited, others not) must be impossible.
+
+4. **Bank fee cap is read from the contract record, never from request parameters.** The distribution calculator reads `contract.bankFeeCapPct` — it does not accept it as an input parameter at distribution time.
+
+5. **Never use JS `number` for money.** Use `Decimal` from decimal.js on both frontend and backend. Prisma returns Decimal objects — always call `.toString()` before passing to `new Decimal()`.
+
+6. **No soft deletes on financial records.** Contracts, allocations, reports, distributions — status fields change, records stay forever.
+
+7. **Always pass the Prisma transaction client to `logAction`.** If the audit log write fails, the whole transaction rolls back. This is intentional — a financial operation without an audit record must not be committed.
+
+8. **Bun only.** Never use `npm`, `npx`, or `node` in scripts or documentation. Always `bun`, `bunx`, `bun run`.
+
+---
+
+## Seed data
+
+`packages/api/prisma/seed.ts` — run with `bun run db:seed`.
+
+**Credentials:**
+
+| Email | Password | Role |
+|---|---|---|
+| `admin@amanat.dev` | `Admin1234!` | ADMIN |
+| `depositor1@amanat.dev` | `Test1234!` | DEPOSITOR — RM 5,000 |
+| `depositor2@amanat.dev` | `Test1234!` | DEPOSITOR — RM 25,000 |
+| `depositor3@amanat.dev` | `Test1234!` | DEPOSITOR — RM 100,000 |
+| `sabahsolar@amanat.dev` | `Test1234!` | BUSINESS — GREEN_ENERGY, score 85 |
+| `klsme@amanat.dev` | `Test1234!` | BUSINESS — SME_FINANCING, score 78 |
+| `selangorhousing@amanat.dev` | `Test1234!` | BUSINESS — AFFORDABLE_HOUSING, score 82 |
+
+**Contracts:**
+
+| Business | Type | Principal | Bank fee | Depositor split |
+|---|---|---|---|---|
+| Sabah Solar Farm | MUSHARAKA | RM 2,000,000 | 22% | 78% |
+| KL SME Fund | MUDARABA | RM 800,000 | 25% | 75% |
+| Selangor Housing | MURABAHA | RM 1,500,000 | 20% | 80% |
+
+**Allocations** (respect concentration limits):
+- Depositor 1: RM 2,000 solar / RM 1,500 SME / RM 1,500 housing
+- Depositor 2: RM 10,000 solar / RM 7,500 SME / RM 7,500 housing
+- Depositor 3: RM 40,000 solar / RM 30,000 SME / RM 30,000 housing
+
+**Reports:** 3 verified reports per contract (last 3 months), with executed distributions. Depositor wallet balances must reflect accumulated profit — do not leave balances at starting values.
+
+---
+
+## Suggested session sequence
+
+| Session | Goal |
+|---|---|
+| 1 | Scaffold + database + health check (covered by initial prompt) |
+| 2 | Auth module — register, login, refresh token, route guards |
+| 3 | Shariah engine — full `bun test` unit tests for all four modules |
+| 4 | Contracts + allocations API with all guards enforced |
+| 5 | Oracle module — report submit + admin verify → distribution trigger |
+| 6 | Distribution engine — atomic execution + zakat ledger |
+| 7 | Depositor portfolio + audit trail API endpoints |
+| 8 | Vue depositor dashboard + portfolio page |
+| 9 | Vue impact statement page |
+| 10 | Vue business reporting portal |
+| 11 | Vue admin panel |
+| 12 | End-to-end demo run — full flow, all roles |
+
+**Start each session** with:
+> "We are building Amanat. Here is the full project context: [paste this document]. Today is session N — [goal]. The project is already running. Read the existing code structure before writing anything."
+
+---
+
+## AWS cloud-native architecture (Phase 2+)
+
+The MVP runs locally on Docker Compose. AWS services are introduced after the local MVP is validated.
+
+### Service map
+
+| AWS Service | Replaces | Amanat purpose |
+|---|---|---|
+| ECS Fargate | Docker Compose | Runs Fastify API — scales to zero |
+| Lambda | BullMQ workers | Distribution execution, watchlist scan |
+| RDS PostgreSQL | Local Postgres | Primary data store |
+| **QLDB** | AuditLog table | Cryptographically verifiable append-only ledger |
+| ElastiCache Redis | Local Redis | Session cache, rate limiting |
+| S3 | Local file storage | Business document uploads |
+| **EventBridge** | BullMQ event bus | ReportVerified → auto-triggers distribution Lambda |
+| SQS + DLQ | BullMQ queues | Failed distributions never silently disappear |
+| SNS | Custom notifications | Fan-out: email + dashboard push on distribution |
+| **Cognito** | Custom JWT auth | MFA, token management — required for BNM sandbox |
+| **KMS** | Nothing (gap) | Encrypt PII + financial data at rest |
+| Secrets Manager | `.env` files | Rotate DB credentials automatically |
+| CloudFront + S3 | Vite dev server | React/Vue app global CDN |
+| API Gateway | Manual routing | Rate limiting, auth verification |
+| CloudTrail | Nothing | Every AWS API call logged — infrastructure audit |
+| **CDK** | Manual console | All infrastructure as TypeScript — version controlled |
+| CodePipeline + CodeBuild | Manual deploys | Every deploy automated, logged, reversible |
+| CloudWatch | Console logs | Centralised logs, alarms on DLQ and Lambda failures |
+
+**Bold** = services unique to this stack that provide regulatory or anti-exploitation value you cannot replicate yourself.
+
+### Distribution event flow (AWS)
 
 ```
-packages/web/src/
-├── plugins/
-│   ├── vuetify.ts
-│   ├── query.ts
-│   └── router.ts
-├── stores/
-│   ├── auth.ts
-│   ├── notifications.ts
-│   └── preferences.ts
-├── composables/
-│   ├── usePortfolio.ts
-│   ├── useImpact.ts
-│   ├── useDistributions.ts
-│   ├── useAuditTrail.ts
-│   ├── useContracts.ts
-│   └── useReports.ts
-├── layouts/
-│   ├── DepositorLayout.vue
-│   ├── BusinessLayout.vue
-│   └── AdminLayout.vue
-├── pages/
-│   ├── auth/LoginPage.vue
-│   ├── depositor/
-│   │   ├── DashboardPage.vue
-│   │   ├── PortfolioPage.vue
-│   │   ├── ImpactPage.vue
-│   │   └── AuditPage.vue
-│   ├── business/
-│   │   ├── DashboardPage.vue
-│   │   ├── ReportNewPage.vue
-│   │   └── ReportsPage.vue
-│   └── admin/
-│       ├── ApplicationsPage.vue
-│       ├── ContractsPage.vue
-│       ├── ReportQueuePage.vue
-│       ├── DistributionsPage.vue
-│       └── ZakatPage.vue
-├── components/
-│   ├── portfolio/AllocationTable.vue
-│   ├── portfolio/InvestmentDrawer.vue
-│   ├── impact/ProfitChain.vue
-│   ├── impact/ImpactMetrics.vue
-│   ├── impact/VerificationBadges.vue
-│   ├── shared/AppSnackbar.vue
-│   ├── shared/RmAmount.vue
-│   └── shared/StatusChip.vue
-├── api/
-│   ├── client.ts
-│   └── endpoints/
-└── main.ts
+Admin verifies OutcomeReport
+  → EventBridge: { type: "REPORT_VERIFIED", reportId }
+  → Lambda: distribution-calculator
+      reads report + contract from RDS
+      calculates breakdown
+      writes Distribution (PENDING) to RDS
+      writes proof to QLDB
+  → EventBridge: { type: "DISTRIBUTION_CALCULATED" }
+  → Lambda: distribution-executor
+      Postgres transaction: credits + balance updates
+      QLDB: execution proof
+      Distribution status → EXECUTED
+  → SNS: fan-out
+      SES → depositor email
+      API Gateway WebSocket → dashboard update
+      CloudWatch → metric
+
+On any Lambda failure → SQS DLQ → CloudWatch alarm → alert within 60s
 ```
+
+### Deploy region
+
+**ap-southeast-1 (Singapore)** — BNM data residency compliance. Do not use ap-southeast-3 as primary.
+
+### MVP cost estimate
+
+| Service | Monthly |
+|---|---|
+| ECS Fargate (2 tasks) | ~$18 |
+| RDS PostgreSQL t4g.micro | ~$15 |
+| QLDB | ~$5 |
+| ElastiCache t4g.micro | ~$12 |
+| Lambda + EventBridge + SQS | ~$1 |
+| CloudFront + S3 | ~$1 |
+| Cognito (< 50k MAU) | $0 |
+| CloudWatch + CloudTrail + KMS | ~$8 |
+| **Total** | **~$60/month** |
+
+Apply for AWS Activate startup credits ($5k–$100k). At $60/month, $5k covers ~7 years of MVP infrastructure.
+
+---
+
+## Future phases
+
+| Phase | What gets built |
+|---|---|
+| 4 | Blockchain / QLDB migration — AuditLog tables sync to Hyperledger Fabric |
+| 5 | Real oracle nodes — replace admin-approval with 2-of-3 auditor consensus |
+| 6 | Real payment rails — DuitNow / FPX replaces simulated wallet balances |
+| 7 | Cognito + KMS — production auth and encryption for BNM sandbox application |
+| 8 | ML anomaly detection — trained on AuditLog data to flag unusual patterns |
+| 9 | Mobile app — Vue/Capacitor wrapper around the web frontend |

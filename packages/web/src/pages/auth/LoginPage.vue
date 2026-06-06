@@ -1,3 +1,109 @@
+<script setup lang="ts">
+import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notifications'
+import { authApi } from '@/api/endpoints/auth'
+
+const router = useRouter()
+const auth = useAuthStore()
+const notifications = useNotificationStore()
+
+const activeTab = ref('login')
+const showLoginPassword = ref(false)
+const showRegPassword = ref(false)
+
+const loginFormRef = ref()
+const registerFormRef = ref()
+const loginLoading = ref(false)
+const registerLoading = ref(false)
+const loginError = ref('')
+const registerError = ref('')
+
+const loginForm = reactive({ email: '', password: '' })
+
+const registerForm = reactive({
+  role: 'DEPOSITOR' as 'DEPOSITOR' | 'BUSINESS',
+  email: '',
+  password: '',
+  displayName: '',
+  legalName: '',
+  sector: '',
+  description: '',
+})
+
+const sectors = [
+  { title: 'Green Energy',       value: 'GREEN_ENERGY' },
+  { title: 'SME Financing',      value: 'SME_FINANCING' },
+  { title: 'Affordable Housing', value: 'AFFORDABLE_HOUSING' },
+  { title: 'Trade Finance',      value: 'TRADE_FINANCE' },
+  { title: 'Agriculture',        value: 'AGRICULTURE' },
+]
+
+const rules = {
+  required:  (v: string) => !!v || 'Required',
+  email:     (v: string) => /.+@.+\..+/.test(v) || 'Invalid email',
+  password:  (v: string) => /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(v) || '8+ chars, 1 uppercase, 1 number',
+  minLen:    (n: number) => (v: string) => (v?.length ?? 0) >= n || `Minimum ${n} characters`,
+}
+
+function redirectByRole(role: string) {
+  if (role === 'DEPOSITOR') router.push('/depositor/dashboard')
+  else if (role === 'BUSINESS') router.push('/business/dashboard')
+  else if (role === 'ADMIN') router.push('/admin/applications')
+  else router.push('/login')
+}
+
+async function handleLogin() {
+  const { valid } = await loginFormRef.value.validate()
+  if (!valid) return
+
+  loginLoading.value = true
+  loginError.value = ''
+  try {
+    const res = await authApi.login({ email: loginForm.email, password: loginForm.password })
+    auth.setAuth(res.data.user, res.data.accessToken)
+    notifications.success('Welcome back!')
+    redirectByRole(res.data.user.role)
+  } catch (err: any) {
+    loginError.value = err.response?.data?.error ?? 'Login failed. Please try again.'
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+async function handleRegister() {
+  const { valid } = await registerFormRef.value.validate()
+  if (!valid) return
+
+  registerLoading.value = true
+  registerError.value = ''
+  try {
+    const payload: Parameters<typeof authApi.register>[0] = {
+      email: registerForm.email,
+      password: registerForm.password,
+      role: registerForm.role,
+    }
+    if (registerForm.role === 'DEPOSITOR') {
+      payload.displayName = registerForm.displayName
+    } else {
+      payload.legalName   = registerForm.legalName
+      payload.sector      = registerForm.sector
+      payload.description = registerForm.description
+    }
+
+    const res = await authApi.register(payload)
+    auth.setAuth(res.data.user, res.data.accessToken)
+    notifications.success('Account created successfully!')
+    redirectByRole(res.data.user.role)
+  } catch (err: any) {
+    registerError.value = err.response?.data?.error ?? 'Registration failed. Please try again.'
+  } finally {
+    registerLoading.value = false
+  }
+}
+</script>
+
 <template>
   <v-app>
     <v-container class="fill-height d-flex align-center justify-center" fluid>
@@ -180,109 +286,3 @@
     </v-container>
   </v-app>
 </template>
-
-<script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { useNotificationStore } from '@/stores/notifications'
-import { authApi } from '@/api/endpoints/auth'
-
-const router = useRouter()
-const auth = useAuthStore()
-const notifications = useNotificationStore()
-
-const activeTab = ref('login')
-const showLoginPassword = ref(false)
-const showRegPassword = ref(false)
-
-const loginFormRef = ref()
-const registerFormRef = ref()
-const loginLoading = ref(false)
-const registerLoading = ref(false)
-const loginError = ref('')
-const registerError = ref('')
-
-const loginForm = reactive({ email: '', password: '' })
-
-const registerForm = reactive({
-  role: 'DEPOSITOR' as 'DEPOSITOR' | 'BUSINESS',
-  email: '',
-  password: '',
-  displayName: '',
-  legalName: '',
-  sector: '',
-  description: '',
-})
-
-const sectors = [
-  { title: 'Green Energy',       value: 'GREEN_ENERGY' },
-  { title: 'SME Financing',      value: 'SME_FINANCING' },
-  { title: 'Affordable Housing', value: 'AFFORDABLE_HOUSING' },
-  { title: 'Trade Finance',      value: 'TRADE_FINANCE' },
-  { title: 'Agriculture',        value: 'AGRICULTURE' },
-]
-
-const rules = {
-  required:  (v: string) => !!v || 'Required',
-  email:     (v: string) => /.+@.+\..+/.test(v) || 'Invalid email',
-  password:  (v: string) => /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(v) || '8+ chars, 1 uppercase, 1 number',
-  minLen:    (n: number) => (v: string) => (v?.length ?? 0) >= n || `Minimum ${n} characters`,
-}
-
-function redirectByRole(role: string) {
-  if (role === 'DEPOSITOR') router.push('/depositor/dashboard')
-  else if (role === 'BUSINESS') router.push('/business/dashboard')
-  else if (role === 'ADMIN') router.push('/admin/applications')
-  else router.push('/login')
-}
-
-async function handleLogin() {
-  const { valid } = await loginFormRef.value.validate()
-  if (!valid) return
-
-  loginLoading.value = true
-  loginError.value = ''
-  try {
-    const res = await authApi.login({ email: loginForm.email, password: loginForm.password })
-    auth.setAuth(res.data.user, res.data.accessToken)
-    notifications.success(`Welcome back!`)
-    redirectByRole(res.data.user.role)
-  } catch (err: any) {
-    loginError.value = err.response?.data?.error ?? 'Login failed. Please try again.'
-  } finally {
-    loginLoading.value = false
-  }
-}
-
-async function handleRegister() {
-  const { valid } = await registerFormRef.value.validate()
-  if (!valid) return
-
-  registerLoading.value = true
-  registerError.value = ''
-  try {
-    const payload: Parameters<typeof authApi.register>[0] = {
-      email: registerForm.email,
-      password: registerForm.password,
-      role: registerForm.role,
-    }
-    if (registerForm.role === 'DEPOSITOR') {
-      payload.displayName = registerForm.displayName
-    } else {
-      payload.legalName    = registerForm.legalName
-      payload.sector       = registerForm.sector
-      payload.description  = registerForm.description
-    }
-
-    const res = await authApi.register(payload)
-    auth.setAuth(res.data.user, res.data.accessToken)
-    notifications.success('Account created successfully!')
-    redirectByRole(res.data.user.role)
-  } catch (err: any) {
-    registerError.value = err.response?.data?.error ?? 'Registration failed. Please try again.'
-  } finally {
-    registerLoading.value = false
-  }
-}
-</script>

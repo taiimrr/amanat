@@ -68,7 +68,7 @@ export async function register(
   if (existing) throw new AppError(409, 'Email already registered')
 
   if (body.role === 'BUSINESS' && body.description) {
-    const exclusion = checkSectorExclusion(body.description)
+    const exclusion = checkSectorExclusion(body.sector ?? '', body.description)
     if (exclusion.blocked) throw new AppError(422, exclusion.reason ?? 'Business description contains prohibited content')
   }
 

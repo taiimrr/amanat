@@ -1,3 +1,16 @@
+<script setup lang="ts">
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+
+const upcomingFeatures = [
+  'Active contracts overview',
+  'Monthly report submission',
+  'Report history & status',
+  'Profit distribution records',
+]
+</script>
+
 <template>
   <v-container class="pa-6">
     <h1 class="text-h4 font-weight-bold mb-1">Business Dashboard</h1>
@@ -54,16 +67,3 @@
     </v-row>
   </v-container>
 </template>
-
-<script setup lang="ts">
-import { useAuthStore } from '@/stores/auth'
-
-const auth = useAuthStore()
-
-const upcomingFeatures = [
-  'Active contracts overview',
-  'Monthly report submission',
-  'Report history & status',
-  'Profit distribution records',
-]
-</script>

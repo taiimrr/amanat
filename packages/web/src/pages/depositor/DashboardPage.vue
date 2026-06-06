@@ -1,9 +1,41 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/api/endpoints/auth'
+
+const auth = useAuthStore()
+const verifying = ref(false)
+const verifyResult = ref<{ ok: boolean; message: string } | null>(null)
+
+const upcomingFeatures = [
+  'Wallet balance & portfolio',
+  'Allocation breakdown chart',
+  'Recent distributions',
+  'Impact metrics',
+]
+
+async function verifyToken() {
+  verifying.value = true
+  verifyResult.value = null
+  try {
+    const res = await authApi.me()
+    verifyResult.value = {
+      ok: true,
+      message: `Verified: ${res.data.email} (${res.data.role})`,
+    }
+  } catch {
+    verifyResult.value = { ok: false, message: 'Token verification failed.' }
+  } finally {
+    verifying.value = false
+  }
+}
+</script>
+
 <template>
   <v-container class="pa-6">
     <h1 class="text-h4 font-weight-bold mb-1">Dashboard</h1>
     <p class="text-body-2 text-medium-emphasis mb-6">Welcome back, {{ auth.user?.email }}</p>
 
-    <!-- Auth status card -->
     <v-row>
       <v-col cols="12" md="6" lg="4">
         <v-card color="primary" variant="tonal">
@@ -88,36 +120,3 @@
     </v-row>
   </v-container>
 </template>
-
-<script setup lang="ts">
-import { ref } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { authApi } from '@/api/endpoints/auth'
-
-const auth = useAuthStore()
-const verifying = ref(false)
-const verifyResult = ref<{ ok: boolean; message: string } | null>(null)
-
-const upcomingFeatures = [
-  'Wallet balance & portfolio',
-  'Allocation breakdown chart',
-  'Recent distributions',
-  'Impact metrics',
-]
-
-async function verifyToken() {
-  verifying.value = true
-  verifyResult.value = null
-  try {
-    const res = await authApi.me()
-    verifyResult.value = {
-      ok: true,
-      message: `Verified: ${res.data.email} (${res.data.role})`,
-    }
-  } catch {
-    verifyResult.value = { ok: false, message: 'Token verification failed.' }
-  } finally {
-    verifying.value = false
-  }
-}
-</script>

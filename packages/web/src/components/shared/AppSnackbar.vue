@@ -1,3 +1,9 @@
+<script setup lang="ts">
+import { useNotificationStore } from '@/stores/notifications'
+
+const notifications = useNotificationStore()
+</script>
+
 <template>
   <template v-for="item in notifications.items" :key="item.id">
     <v-snackbar
@@ -14,9 +20,3 @@
     </v-snackbar>
   </template>
 </template>
-
-<script setup lang="ts">
-import { useNotificationStore } from '@/stores/notifications'
-
-const notifications = useNotificationStore()
-</script>
