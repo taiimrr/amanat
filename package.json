@@ -1,0 +1,14 @@
+{
+  "name": "amanat",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev:api": "bun run dev --cwd packages/api",
+    "dev:web": "bun run dev --cwd packages/web",
+    "build": "bun run build --cwd packages/api && bun run build --cwd packages/web",
+    "test": "bun run test --cwd packages/api",
+    "db:migrate": "bun run db:migrate --cwd packages/api",
+    "db:seed": "bun run db:seed --cwd packages/api",
+    "db:studio": "bun run db:studio --cwd packages/api"
+  }
+}

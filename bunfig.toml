@@ -1,0 +1,3 @@
+[install]
+# Bun workspace install config
+exact = false

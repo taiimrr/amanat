@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  DEPOSITOR
+  BUSINESS
+  ADMIN
+}
+
+enum SectorType {
+  GREEN_ENERGY
+  SME_FINANCING
+  AFFORDABLE_HOUSING
+  TRADE_FINANCE
+  AGRICULTURE
+}
+
+enum ContractType {
+  MUDARABA
+  MUSHARAKA
+  MURABAHA
+  IJARA
+  SALAM
+  WAKALA
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  DEFAULTED
+  WATCHLIST
+}
+
+enum AllocationStatus {
+  ACTIVE
+  EXITED
+  WATCHLIST
+}
+
+enum BusinessStatus {
+  APPLICANT
+  APPROVED
+  ACTIVE
+  WATCHLIST
+  EXITED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  DISPUTED
+  REJECTED
+}
+
+enum DistributionStatus {
+  PENDING
+  EXECUTED
+  FAILED
+}
+
+enum ZakatType {
+  COLLECTED
+  DISBURSED
+}
+
+enum AuditAction {
+  CONTRACT_CREATED
+  CONTRACT_WATCHLISTED
+  CONTRACT_COMPLETED
+  ALLOCATION_CREATED
+  ALLOCATION_EXITED
+  REPORT_SUBMITTED
+  REPORT_VERIFIED
+  REPORT_DISPUTED
+  REPORT_REJECTED
+  DISTRIBUTION_CALCULATED
+  DISTRIBUTION_EXECUTED
+  DISTRIBUTION_FAILED
+  ZAKAT_COLLECTED
+  ZAKAT_DISBURSED
+  BUSINESS_APPROVED
+  BUSINESS_WATCHLISTED
+  SHARIAH_FLAG_RAISED
+  TAWARRUQ_FLAG_RAISED
+  USER_REGISTERED
+  USER_LOGIN
+}
+
+// ─── Core user models ─────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  depositor    Depositor?
+  business     Business?
+  auditLogs    AuditLog[]
+
+  @@index([email])
+}
+
+model Depositor {
+  id            String              @id @default(uuid())
+  userId        String              @unique
+  user          User                @relation(fields: [userId], references: [id])
+  displayName   String
+  walletBalance Decimal             @default(0) @db.Decimal(18, 2)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  allocations   DepositAllocation[]
+  credits       DistributionCredit[]
+}
+
+model Business {
+  id                  String               @id @default(uuid())
+  userId              String               @unique
+  user                User                 @relation(fields: [userId], references: [id])
+  legalName           String
+  registrationNumber  String?
+  sector              SectorType
+  description         String               @db.Text
+  dueDiligenceScore   Int                  @default(0)
+  status              BusinessStatus       @default(APPLICANT)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  contracts           InvestmentContract[]
+  reports             OutcomeReport[]
+}
+
+// ─── Investment models ────────────────────────────────────────────────────────
+
+model InvestmentContract {
+  id                String              @id @default(uuid())
+  businessId        String
+  business          Business            @relation(fields: [businessId], references: [id])
+  contractType      ContractType
+  principalRM       Decimal             @db.Decimal(18, 2)
+  bankFeeCapPct     Decimal             @db.Decimal(5, 4)   // e.g. 0.2200 = 22%
+  depositorSplitPct Decimal             @db.Decimal(5, 4)   // e.g. 0.7800 = 78%
+  sector            SectorType
+  startDate         DateTime
+  endDate           DateTime?
+  status            ContractStatus      @default(ACTIVE)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  allocations       DepositAllocation[]
+  reports           OutcomeReport[]
+  distributions     Distribution[]
+}
+
+model DepositAllocation {
+  id            String             @id @default(uuid())
+  depositorId   String
+  depositor     Depositor          @relation(fields: [depositorId], references: [id])
+  investmentId  String
+  investment    InvestmentContract @relation(fields: [investmentId], references: [id])
+  amountRM      Decimal            @db.Decimal(18, 2)
+  sharePercent  Decimal            @db.Decimal(10, 8)   // depositor's % of this pool
+  status        AllocationStatus   @default(ACTIVE)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([depositorId])
+  @@index([investmentId])
+}
+
+// ─── Oracle / outcome reporting ───────────────────────────────────────────────
+
+model OutcomeReport {
+  id                  String             @id @default(uuid())
+  contractId          String
+  contract            InvestmentContract @relation(fields: [contractId], references: [id])
+  businessId          String
+  business            Business           @relation(fields: [businessId], references: [id])
+  periodStart         DateTime
+  periodEnd           DateTime
+  revenueRM           Decimal            @db.Decimal(18, 2)
+  expensesRM          Decimal            @db.Decimal(18, 2)
+  grossProfitRM       Decimal            @db.Decimal(18, 2)  // always = revenue - expenses
+  jobsSupported       Int                @default(0)
+  co2AvoidedTonnes    Decimal?           @db.Decimal(10, 4)
+  documentS3Keys      String[]           @default([])        // supporting docs
+  verificationStatus  VerificationStatus @default(PENDING)
+  verifiedByAdminId   String?
+  verifiedAt          DateTime?
+  disputeReason       String?            @db.Text
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  distribution        Distribution?
+
+  @@index([contractId])
+  @@index([verificationStatus])
+}
+
+// ─── Distribution models ──────────────────────────────────────────────────────
+
+model Distribution {
+  id               String             @id @default(uuid())
+  contractId       String
+  contract         InvestmentContract @relation(fields: [contractId], references: [id])
+  reportId         String             @unique
+  report           OutcomeReport      @relation(fields: [reportId], references: [id])
+  grossProfitRM    Decimal            @db.Decimal(18, 2)
+  bankFeeRM        Decimal            @db.Decimal(18, 2)
+  zakatRM          Decimal            @db.Decimal(18, 2)   // 2.5% of bank fee
+  depositorPoolRM  Decimal            @db.Decimal(18, 2)
+  status           DistributionStatus @default(PENDING)
+  calculatedAt     DateTime           @default(now())
+  executedAt       DateTime?
+  failureReason    String?            @db.Text
+  credits          DistributionCredit[]
+
+  @@index([status])
+}
+
+model DistributionCredit {
+  id             String       @id @default(uuid())
+  distributionId String
+  distribution   Distribution @relation(fields: [distributionId], references: [id])
+  depositorId    String
+  depositor      Depositor    @relation(fields: [depositorId], references: [id])
+  amountRM       Decimal      @db.Decimal(18, 2)
+  createdAt      DateTime     @default(now())
+
+  @@index([depositorId])
+}
+
+// ─── Zakat ────────────────────────────────────────────────────────────────────
+
+model ZakatLedger {
+  id           String    @id @default(uuid())
+  sourceId     String    // distributionId (COLLECTED) or disbursement reference (DISBURSED)
+  amountRM     Decimal   @db.Decimal(18, 2)
+  type         ZakatType
+  note         String?   @db.Text
+  createdAt    DateTime  @default(now())
+}
+
+// ─── Audit log — APPEND ONLY, never update or delete ─────────────────────────
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  actorId    String
+  actor      User        @relation(fields: [actorId], references: [id])
+  actorRole  Role
+  action     AuditAction
+  entityType String
+  entityId   String
+  payload    Json
+  createdAt  DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
