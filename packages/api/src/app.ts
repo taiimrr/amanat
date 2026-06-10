@@ -4,6 +4,9 @@ import { redisPlugin } from './plugins/redis.js'
 import { authPlugin } from './plugins/auth.js'
 import { corsPlugin } from './plugins/cors.js'
 import { authRoutes } from './modules/auth/auth.routes.js'
+import { businessRoutes } from './modules/businesses/businesses.routes.js'
+import { contractRoutes } from './modules/contracts/contracts.routes.js'
+import { allocationRoutes } from './modules/allocations/allocations.routes.js'
 
 const app = Fastify({
   logger: {
@@ -31,7 +34,10 @@ await app.register(redisPlugin)
 await app.register(authPlugin)
 
 // Routes
-await app.register(authRoutes, { prefix: '/auth' })
+await app.register(authRoutes,       { prefix: '/auth' })
+await app.register(businessRoutes,   { prefix: '/businesses' })
+await app.register(contractRoutes,   { prefix: '/contracts' })
+await app.register(allocationRoutes, { prefix: '/allocations' })
 
 // Health check
 app.get('/health', async () => ({
